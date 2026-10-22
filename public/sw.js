@@ -1,7 +1,7 @@
 // Service worker: installable + offline. App files are network-first so updates show up right away;
 // Bible chapters are cache-first since the text never changes.
-const CACHE = "scroll-v3";
-const SHELL = ["./", "index.html", "app.js", "content.js", "styles.css", "glass.js", "manifest.webmanifest", "icons/icon-192.png", "icons/icon-512.png"];
+const CACHE = "scroll-v4";
+const SHELL = ["./", "index.html", "app.js", "content.js", "styles.css", "glass.js", "native.js", "vendor/capacitor.js", "manifest.webmanifest", "icons/icon-192.png", "icons/icon-512.png"];
 
 self.addEventListener("install", (e) => e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting())));
 self.addEventListener("activate", (e) => e.waitUntil(

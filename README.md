@@ -33,7 +33,16 @@ Progress and saved verses are stored on the device (no account needed).
 3. Run `python3 build/build.py /tmp/BSB.json`. It pulls the exact verse text and fails loudly on any bad reference.
 4. Bump `CACHE` in `public/sw.js` so installed copies update.
 
-## Deploy (Cloudflare Pages)
+## iPhone app
+
+The iOS app is a Capacitor wrapper around `public/` with native daily reminders, haptics, and on-device backup.
+See **[store/SUBMIT.md](store/SUBMIT.md)** for running it in Xcode and submitting, and **[store/LISTING.md](store/LISTING.md)** for the App Store copy. Screenshots are in `store/screenshots/`.
+
+## Web (GitHub Pages)
+
+Every push to `main` deploys `public/` to https://mikeyp263.github.io/Scroll/ (see `.github/workflows/pages.yml`).
+
+## Deploy elsewhere (Cloudflare Pages)
 
 Workers & Pages → Create → Pages → Connect to Git → this repo. Framework preset **None**, build command **empty**, output directory **`public`**. That's it: no keys, secrets, or storage needed.
 

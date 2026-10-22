@@ -1,5 +1,6 @@
 import { SECTIONS, VERSES, BOOKS } from "./content.js";
 import { GLASS, medallion, unitWindow, roseWindow } from "./glass.js";
+import { NATIVE, initNative, haptic, backup, restore, askForReminders, remindersAllowed, scheduleReminders } from "./native.js";
 
 /* ---------- helpers ---------- */
 const $ = (s, r = document) => r.querySelector(s);
@@ -66,7 +67,7 @@ const parseRef = (ref) => {
 };
 
 const STOP = new Set("the and that with from this have will shall were been your yours they them their there then than into unto upon which what when where whom whose also because not but are was his her him you our ours those these every each said says like even just only very more most some such would could should about over through before after let may might must being again away does done doing made make came come went going yet nor both all any one out its it’s whoever whatever anyone neither either here now how why own can has had did therefore among against i’m who for thus them, until while within without whether toward towards".split(/\s+/));
-const core = (w) => w.replace(/^[^\p{L}’']+|[^\p{L}’']+$/gu, "");
+const core = (w) => w.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "");
 const passageText = (ref) => {
   const v = VERSES[ref];
   if (v) return v.v.map((x) => x[1]).join(" ");
@@ -86,10 +87,10 @@ const VOTD_REFS = ALL_REFS.filter((r) => VERSES[r].v.length === 1 && passageText
 
 /* ---------- state ---------- */
 const KEY = "scroll-v2";
-const fresh = () => ({ done: {}, xp: 0, days: {}, streak: 0, best: 0, last: null, goal: 20, section: "journey", saved: {}, reader: { b: 42, c: 1 }, sound: true, lastLit: null });
+const fresh = () => ({ done: {}, xp: 0, days: {}, streak: 0, best: 0, last: null, goal: 20, section: "journey", saved: {}, reader: { b: 42, c: 1 }, sound: true, lastLit: null, remind: { on: false, time: "19:00", asked: false } });
 let S = fresh();
 try { const raw = lsGet(KEY); if (raw) S = Object.assign(fresh(), JSON.parse(raw)); } catch {}
-const save = () => lsSet(KEY, S);
+const save = () => { lsSet(KEY, S); backup(JSON.stringify(S)); };
 const liveStreak = () => (S.last && dayDiff(S.last, today()) <= 1 ? S.streak : 0);
 const xpToday = () => S.days[today()] || 0;
 const isDone = (id) => !!S.done[id];
@@ -352,28 +353,37 @@ function renderMe() {
   <section class="block"><h3>This week</h3><div class="card week" role="img" aria-label="XP earned each of the last 7 days">${days.map((d) => { const x = S.days[d] || 0; return `<div class="col ${x ? "" : "zero"} ${d === today() ? "today" : ""}"><em>${x || ""}</em><i style="height:${Math.max(4, (x / max) * 86)}px"></i><small>${new Date(d + "T12:00").toLocaleDateString(undefined, { weekday: "narrow" })}</small></div>`; }).join("")}</div>
     <p class="page-sub" style="margin-top:10px">Best streak: ${Math.max(S.best, liveStreak())} day${Math.max(S.best, liveStreak()) === 1 ? "" : "s"}</p></section>
   <section class="block"><h3>Daily goal</h3><div class="segs">${[[10, "Casual"], [20, "Regular"], [30, "Serious"], [50, "Intense"]].map(([n, l]) => `<button data-goal="${n}" aria-pressed="${S.goal === n}">${l} · ${n}</button>`).join("")}</div></section>
+  ${NATIVE ? `<section class="block"><h3>Daily reminder</h3><div class="segs"><button data-remind="1" aria-pressed="${S.remind.on}">On</button><button data-remind="0" aria-pressed="${!S.remind.on}">Off</button></div>
+    ${S.remind.on ? `<label class="card goal" style="margin-top:10px" for="rtime"><div><b>Remind me at</b><small>Skipped on days you've already done a lesson</small></div><input id="rtime" type="time" value="${S.remind.time}" class="search" style="width:auto"></label>` : ""}</section>` : ""}
   <section class="block"><h3>Sound effects</h3><div class="segs"><button data-sound="1" aria-pressed="${S.sound}">On</button><button data-sound="0" aria-pressed="${!S.sound}">Off</button></div></section>
   <button class="linkbtn" id="reset">Reset all progress</button>
-  <p class="fine">Scripture quotations are from the Berean Standard Bible (BSB), which is in the public domain. Your progress and saved verses are stored on this device.</p>`;
+  <p class="fine">Scripture quotations are from the Berean Standard Bible (BSB), which is in the public domain. Your progress and saved verses are stored on this device.</p><p class="fine"><a href="privacy.html" style="color:var(--muted)">Privacy</a> · <a href="support.html" style="color:var(--muted)">Support</a></p>`;
   view().innerHTML = `<div class="wrap">${h}</div>`;
   $$("[data-go]").forEach((b) => (b.onclick = () => { S.section = b.dataset.go; save(); tab("learn"); }));
   $$("[data-goal]").forEach((b) => (b.onclick = () => { S.goal = +b.dataset.goal; save(); renderMe(); }));
+  $$("[data-remind]").forEach((b) => (b.onclick = async () => { if (b.dataset.remind === "1") await enableReminders(S.remind.time); else { S.remind.on = false; save(); reschedule(); } renderMe(); }));
+  const rt = $("#rtime"); if (rt) rt.onchange = () => { if (rt.value) { S.remind.time = rt.value; save(); reschedule(); toast("Reminder time saved"); } };
   $$("[data-sound]").forEach((b) => (b.onclick = () => { S.sound = b.dataset.sound === "1"; save(); renderMe(); if (S.sound) beep(true); }));
   let armed = false;
   $("#reset").onclick = (e) => { if (!armed) { armed = true; e.target.textContent = "Tap again to erase progress (saved verses are kept)"; return; } const keep = S.saved; S = fresh(); S.saved = keep; save(); toast("Progress reset"); renderMe(); };
 }
 
 /* ---------- exercise builders ---------- */
+// Words that make good blanks in verses the user saved from the reader (no hand-written blank).
+const THEME = ["love","faith","hope","grace","peace","light","life","glory","truth","mercy","heart","spirit","kingdom","heaven","joy","strength","righteousness","salvation","wisdom","power","holy","eternal","world","people","name","blood","cross","sin","death","fear","trust","praise","prayer","bread","water","shepherd","king","children","earth","word","soul","path","rock","fire","lamb","covenant","promise","temple","nations","Lord","God","Father","Son","Spirit","Christ","Jesus"];
+const THEME_SET = new Set(THEME.map((w) => w.toLowerCase()));
 function blankStep(ref) {
   const words = passageText(ref).split(/\s+/);
-  const cand = words.map((w, i) => ({ i, c: core(w) })).filter((x) => x.c.length >= 4 && !STOP.has(x.c.toLowerCase()) && x.c !== x.c.toUpperCase());
+  const k = VERSES[ref] && VERSES[ref].k;
+  if (k) { const all = shuffle([k.w, ...k.o]); return { type: "blank", ref, idx: k.i, options: all, ans: all.indexOf(k.w) }; }
+  const counts = {}; words.forEach((w) => { const c = core(w).toLowerCase(); counts[c] = (counts[c] || 0) + 1; });
+  let cand = words.map((w, i) => ({ i, c: core(w) })).filter((x) => THEME_SET.has(x.c.toLowerCase()) && counts[x.c.toLowerCase()] === 1);
+  if (!cand.length) cand = words.map((w, i) => ({ i, c: core(w) })).filter((x) => x.c.length >= 5 && !STOP.has(x.c.toLowerCase()) && counts[x.c.toLowerCase()] === 1);
   if (!cand.length) return null;
-  cand.sort((a, b) => b.c.length - a.c.length);
-  const pick = cand[rand(Math.min(5, cand.length))];
-  const ans = pick.c, lower = ans.toLowerCase(), cap = ans[0] !== ans[0].toLowerCase();
-  const inVerse = new Set(words.map((w) => core(w).toLowerCase()));
-  let pool = POOL.filter((w) => w !== lower && !inVerse.has(w) && Math.abs(w.length - ans.length) <= 3);
-  const opts = pickN(pool, 3).map((w) => (cap ? w[0].toUpperCase() + w.slice(1) : w));
+  const pick = cand[rand(cand.length)], ans = pick.c, cap = ans[0] !== ans[0].toLowerCase();
+  const inVerse = new Set(Object.keys(counts));
+  const pool = THEME_SET.has(ans.toLowerCase()) ? THEME.filter((w) => w[0] === w[0].toLowerCase()) : POOL.filter((w) => Math.abs(w.length - ans.length) <= 2);
+  const opts = pickN(pool.filter((w) => !inVerse.has(w.toLowerCase())), 3).map((w) => (cap ? w[0].toUpperCase() + w.slice(1) : w));
   const all = shuffle([ans, ...opts]);
   return { type: "blank", ref, idx: pick.i, options: all, ans: all.indexOf(ans) };
 }
@@ -383,14 +393,20 @@ function whereStep(ref, pool) {
   const opts = shuffle([ref, ...pickN(others.length >= 3 ? others : ALL_REFS.filter((r) => r !== ref), 3)]);
   return { type: "where", ref, options: opts, ans: opts.indexOf(ref) };
 }
+// Put a real phrase from the verse back in order. Uses a natural clause (4 to 9 words); no filler words.
 function buildStep(ref) {
   const words = passageText(ref).split(/\s+/).filter(Boolean);
-  let start = 0, end = words.length;
-  if (words.length > 9) { const len = 6 + rand(3); start = rand(words.length - len + 1); end = start + len; }
+  const clauses = []; let st = 0;
+  words.forEach((w, i) => { if (/[,;:.!?”’]$/.test(w) || i === words.length - 1) { clauses.push([st, i + 1]); st = i + 1; } });
+  let good = clauses.filter(([a, b]) => b - a >= 4 && b - a <= 9);
+  let start, end;
+  if (good.length) [start, end] = good[rand(good.length)];
+  else if (words.length <= 9) [start, end] = [0, words.length];
+  else { const len = 7; start = rand(words.length - len + 1); end = start + len; }
   const chunk = words.slice(start, end).map(core).filter(Boolean);
-  const inVerse = new Set(words.map((w) => core(w).toLowerCase()));
-  const extra = pickN(POOL.filter((w) => !inVerse.has(w)), 2);
-  return { type: "build", ref, start, end, chunk, bank: shuffle([...chunk, ...extra]) };
+  let bank = shuffle(chunk);
+  for (let t = 0; t < 5 && bank.join(" ") === chunk.join(" "); t++) bank = shuffle(chunk);
+  return { type: "build", ref, start, end, chunk, bank };
 }
 function mcStep(q) {
   const [question, ...opts] = q, correct = opts[0], all = shuffle(opts);
@@ -500,7 +516,7 @@ function check() {
   else { ok = P.sel === st.ans; right = st.options[st.ans]; $$("#pin .opt").forEach((b, j) => { b.disabled = true; if (j === st.ans) b.classList.add("right"); else if (j === P.sel) b.classList.add("wrong"); }); if (st.type === "blank") $("#blank").textContent = right; }
   if (!st.retry) { P.graded++; if (ok) P.firstRight++; }
   P.combo = ok ? P.combo + 1 : 0; $("#combo").innerHTML = P.combo >= 3 ? `${I.flame}${P.combo}` : "";
-  try { navigator.vibrate && navigator.vibrate(ok ? 12 : [30, 40, 30]); } catch {}
+  haptic(ok ? "light" : "error");
   if (!ok && !P.retried.has(st.uid)) { P.retried.add(st.uid); P.steps.push({ ...st, retry: true, ...(st.type === "build" ? { bank: shuffle(st.bank) } : st.options ? reshuffle(st) : {}) }); }
   beep(ok);
   const praise = P.combo >= 3 ? `${P.combo} in a row!` : ["Excellent!", "Nice job!", "Correct!", "Well done!", "Amen!", "Great!"][rand(6)];
@@ -537,7 +553,8 @@ function finish() {
   beep(true); setTimeout(() => beep(true), 140);
   wireSave($("#pin"));
   $("#pfoot").className = "p-foot"; $("#fb").hidden = true;
-  const go = $("#pgo"); go.disabled = false; go.textContent = "Continue"; go.onclick = () => { renderLearn.scrolled = false; closePlayer(); };
+  const go = $("#pgo"); go.disabled = false; go.textContent = "Continue"; go.onclick = () => { closePlayer(); if (NATIVE && !S.remind.asked) offerReminder(); };
+  haptic("success"); reschedule();
   $("#pbody").scrollTop = 0;
 }
 
@@ -601,7 +618,32 @@ document.addEventListener("keydown", (e) => {
 
 $(".tabs").innerHTML = `<div class="bar">${[["learn", "Learn", I.learn], ["bible", "Bible", I.book], ["saved", "Saved", I.heart], ["me", "Profile", I.user]].map(([k, l, ic]) => `<button role="tab" data-tab="${k}" aria-selected="${k === TAB}">${ic}${l}</button>`).join("")}</div>`;
 $$(".tabs button").forEach((b) => (b.onclick = () => tab(b.dataset.tab)));
+/* ---------- reminders (iOS app only) ---------- */
+function reschedule() {
+  if (!NATIVE) return;
+  const verses = pickN(VOTD_REFS, 14).map((r) => ({ ref: r, text: passageText(r) }));
+  scheduleReminders({ on: S.remind.on, time: S.remind.time, doneToday: S.last === today(), streak: liveStreak(), verses });
+}
+async function enableReminders(time) {
+  const ok = await askForReminders();
+  S.remind = { ...S.remind, on: ok, time, asked: true }; save();
+  if (ok) { reschedule(); toast("Daily reminder is on"); } else toast("Notifications are off for Scroll. Turn them on in iPhone Settings.");
+}
+function offerReminder() {
+  S.remind.asked = true; save();
+  sheet(`<div class="medal-row">${medallion(GLASS.gold, "current", D(I.flame), 9)}<div><span class="eyebrow">Stay consistent</span><h3>Want a daily nudge?</h3></div></div>
+    <p>A gentle reminder with a verse, once a day. It skips days you've already done a lesson.</p>
+    <label class="card goal" for="otime" style="margin-bottom:14px"><div><b>Remind me at</b></div><input id="otime" type="time" value="${S.remind.time}" class="search" style="width:auto"></label>
+    <div style="display:grid;gap:10px"><button class="btn wide" id="ron">Turn on reminders</button><button class="btn ghost wide" id="roff">Not now</button></div>`,
+    (el) => { el.querySelector("#ron").onclick = async () => { const t = el.querySelector("#otime").value || "19:00"; closeSheet(); await enableReminders(t); }; el.querySelector("#roff").onclick = closeSheet; });
+}
+
 render();
+initNative(() => { reschedule(); refresh(); });
+if (NATIVE) {
+  if (!lsGet(KEY)) restore().then((raw) => { if (!raw) return; try { S = Object.assign(fresh(), JSON.parse(raw)); lsSet(KEY, S); refresh(); } catch {} });
+  remindersAllowed().then((ok) => { if (!ok && S.remind.on) { S.remind.on = false; save(); } reschedule(); });
+}
 
 if ("serviceWorker" in navigator && location.protocol === "https:" && !/claude|anthropic/.test(location.hostname)) {
   window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));

@@ -1,0 +1,25 @@
+{
+  "appId": "com.mikeypatterson.scroll",
+  "appName": "Scroll",
+  "webDir": "public",
+  "backgroundColor": "#0C0F16",
+  "ios": {
+    "contentInset": "never",
+    "backgroundColor": "#0C0F16"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 500,
+      "launchAutoHide": true,
+      "backgroundColor": "#0C0F16",
+      "showSpinner": false
+    },
+    "StatusBar": {
+      "style": "DARK",
+      "overlaysWebView": true
+    },
+    "LocalNotifications": {
+      "iconColor": "#E6C36A"
+    }
+  }
+}

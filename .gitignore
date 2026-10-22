@@ -4,3 +4,10 @@ node_modules/
 .dev.vars
 build/__pycache__/
 build/curriculum/__pycache__/
+node_modules/
+.DS_Store
+ios/App/App/public/
+ios/App/build/
+ios/DerivedData/
+*.xcuserstate
+xcuserdata/
