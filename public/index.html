@@ -4,57 +4,24 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Scroll</title>
-<meta name="description" content="Learn the whole Bible, Duolingo-style.">
-<meta name="theme-color" content="#EEF2EC" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#101612" media="(prefers-color-scheme: dark)">
+<meta name="description" content="Learn the Bible every day. Bite-size lessons, real verses, and a place to keep the ones that speak to you.">
+<meta name="theme-color" content="#F5F7F2" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#111714" media="(prefers-color-scheme: dark)">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Scroll">
-<link rel="manifest" href="/manifest.webmanifest">
-<link rel="icon" href="/icons/icon-192.png" type="image/png">
-<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Young+Serif&family=Figtree:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@500&display=swap">
-<link rel="stylesheet" href="/styles.css">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Literata:opsz,wght@7..72,400;7..72,500&family=Nunito:wght@600;700;800;900&display=swap">
+<link rel="stylesheet" href="styles.css">
 </head>
-<body>
-<div class="wrap" id="app">
-  <header class="bar">
-    <div class="brand">Scroll</div>
-    <div class="stats">
-      <div class="stat streak" title="Day streak"><svg viewBox="0 0 24 24"><path d="M13.5 1s1 3.5-1.5 6.5S9 11 9 13a3 3 0 0 0 6 0c0-1-.5-2-.5-2S18 12.5 18 16a6 6 0 0 1-12 0c0-5 4-7 5.5-10S13.5 1 13.5 1z"/></svg><span id="streak">0</span></div>
-      <div class="stat xp" title="Total XP"><svg viewBox="0 0 24 24"><path d="M12 2l2.9 6.6 7.1.6-5.4 4.7 1.6 7L12 17.3 5.8 21l1.6-7L2 9.2l7.1-.6z"/></svg><span id="xp">0</span></div>
-    </div>
-  </header>
-  <main id="view"></main>
-</div>
-
-<nav class="tabs" role="tablist">
-  <button role="tab" data-tab="learn" aria-selected="true"><svg viewBox="0 0 24 24"><path d="M12 3a3 3 0 1 1 0 6 3 3 0 0 1 0-6zm-5 7a3 3 0 1 1 0 6 3 3 0 0 1 0-6zm10 3a3 3 0 1 1 0 6 3 3 0 0 1 0-6z"/></svg>Learn</button>
-  <button role="tab" data-tab="plan" aria-selected="false"><svg viewBox="0 0 24 24"><path d="M7 2h2v2h6V2h2v2h3v18H4V4h3zm-1 8v10h12V10zm2 2h3v3H8z"/></svg>Daily</button>
-  <button role="tab" data-tab="library" aria-selected="false"><svg viewBox="0 0 24 24"><path d="M4 4h6a3 3 0 0 1 2 1 3 3 0 0 1 2-1h6v15h-6a2 2 0 0 0-2 2 2 2 0 0 0-2-2H4z"/></svg>Books</button>
-  <button role="tab" data-tab="me" aria-selected="false"><svg viewBox="0 0 24 24"><path d="M4 20h4V10H4zm6 0h4V4h-4zm6 0h4v-7h-4z"/></svg>Progress</button>
-</nav>
-
-<div class="lesson" id="lesson" hidden>
-  <div class="lesson-top">
-    <button class="x" id="quit" aria-label="Quit lesson"><svg viewBox="0 0 24 24"><path d="M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12l5.6 5.6-1.4 1.4-5.6-5.6L6.4 19 5 17.6 10.6 12 5 6.4z"/></svg></button>
-    <div class="prog"><i id="progbar" style="width:0"></i></div>
-    <button class="askbtn" id="askOpen" hidden>Ask</button>
-  </div>
-  <div class="lesson-body" id="lscroll"><div class="inner" id="lbody"></div></div>
-  <div class="foot" id="foot"><div class="inner"><div class="fb" id="fb" hidden></div><button class="go" id="go">Continue</button><button class="alt" id="alt" hidden>Back to path</button></div></div>
-  <div class="sheet" id="sheet" hidden>
-    <div class="inner">
-      <div class="sheet-h"><span>Ask about this lesson</span><button class="x" id="askClose" aria-label="Close questions"><svg viewBox="0 0 24 24"><path d="M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12l5.6 5.6-1.4 1.4-5.6-5.6L6.4 19 5 17.6 10.6 12 5 6.4z"/></svg></button></div>
-      <div class="thread" id="thread"></div>
-      <form class="askrow" id="askForm"><textarea id="askInput" placeholder="Why did God harden Pharaoh's heart?" aria-label="Your question"></textarea><button class="btn primary" type="submit" id="askSend">Ask</button></form>
-    </div>
-  </div>
-</div>
-
-<script type="module" src="/app.js"></script>
+<body data-c="green">
+<main id="view"></main>
+<nav class="tabs" role="tablist" aria-label="Main"></nav>
+<script type="module" src="app.js"></script>
 </body>
 </html>

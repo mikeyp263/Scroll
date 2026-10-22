@@ -1,43 +1,45 @@
 # Scroll
 
-Learn the whole Bible, Duolingo-style. Six paths (The Big Story, Book by Book, all 1,189 chapters, Famous Stories, People, Big Ideas), a Bible in a Year plan, quizzes, XP, streaks, and an Ask button inside every lesson.
+Learn the Bible a few minutes a day, Duolingo-style. Every verse in the app is real Scripture from the Berean Standard Bible.
 
-Installable on your phone's home screen and usable offline for any lesson you've already opened.
+## What's inside
 
-## How it works
+- **Five learning paths**, each with units, lessons, and a trophy review at the end of every unit:
+  - **The Journey** (start here): meet Jesus, understand the gospel, then walk through God's whole story from Genesis to Revelation
+  - **Old Testament**: the Law, history, wisdom books, and the prophets
+  - **New Testament**: Acts, the letters, and Revelation
+  - **The Gospels**: the life of Jesus in order
+  - **Famous Stories**: Noah, David and Goliath, Daniel, Zacchaeus, and more
+- **Lessons** mix short teaching, reading the verse, fill-in-the-blank, "where is this verse?", word ordering, and questions. Missed answers come back at the end.
+- **Saved verses**: tap the heart on any verse. Add a personal note, search, copy, and practice them to memorize.
+- **Bible reader**: the complete BSB, all 66 books. Tap verses to save or copy them.
+- **XP, daily goal, streaks**, a weekly chart, and sound effects.
+- Installable to the home screen and works offline for anything you've opened.
 
-- `public/` is the app: plain HTML, CSS, and JS. No build step.
-- `public/content.js` holds all the lesson lists and the hand-written Big Story lessons. Shared by the app and the backend.
-- `functions/api/` is the backend (Cloudflare Pages Functions):
-  - `lesson.js` returns a saved lesson, or writes it once with Claude and saves it to KV. Every lesson is generated at most once.
-  - `ask.js` answers questions about the current lesson.
-  - `progress.js` syncs progress between devices.
-- `lib/server.js` has the shared backend helpers.
+Progress and saved verses are stored on the device (no account needed).
 
-Writing lessons, asking questions, and syncing need the passcode (`APP_PASSCODE`). Reading a lesson that's already been written doesn't.
+## Project layout
 
-## Deploy on Cloudflare Pages
+- `public/` is the whole app (plain HTML, CSS, JS, no build step to run it).
+  - `content.js` is generated: all sections, lessons, and verse text.
+  - `bible/0.json` to `bible/65.json` are the books of the Bible for the reader.
+- `build/curriculum/*.py` is where lessons are written. One file per section.
+- `build/build.py` turns the curriculum + the BSB text into `public/content.js` and `public/bible/`.
 
-1. Workers & Pages → Create → Pages → Connect to Git → pick this repo.
-2. Build settings: Framework preset **None**, build command **empty**, build output directory **`public`**.
-3. Workers & Pages → KV → create a namespace called `scroll-lessons`.
-4. In the Pages project → Settings → Bindings → add a **KV namespace** binding: variable name `LESSONS`, namespace `scroll-lessons`.
-5. Settings → Variables and Secrets → add (as **Secret**):
-   - `ANTHROPIC_API_KEY`: from console.anthropic.com
-   - `APP_PASSCODE`: anything you'll remember
-   - Optional `MODEL` (plain text): defaults to `claude-sonnet-5-5`
-6. Redeploy so the bindings take effect.
-7. Open the site, go to **Progress**, enter the passcode.
+## Editing lessons
+
+1. Edit a file in `build/curriculum/`. Each lesson is: title, verse references, teaching text (paragraphs split with `|`), and questions (correct answer first; the app shuffles them).
+2. Download the BSB once: `curl -o /tmp/BSB.json https://raw.githubusercontent.com/scrollmapper/bible_databases/master/formats/json/BSB.json`
+3. Run `python3 build/build.py /tmp/BSB.json`. It pulls the exact verse text and fails loudly on any bad reference.
+4. Bump `CACHE` in `public/sw.js` so installed copies update.
+
+## Deploy (Cloudflare Pages)
+
+Workers & Pages → Create → Pages → Connect to Git → this repo. Framework preset **None**, build command **empty**, output directory **`public`**. That's it: no keys, secrets, or storage needed.
 
 ## Add to home screen
 
 - iPhone: open the site in Safari → Share → Add to Home Screen.
 - Android: open in Chrome → menu → Install app.
 
-## Cost
-
-Each new lesson is one Claude call, roughly 1 to 3 cents. Generating every lesson in the app (about 1,400) would be roughly $20 to $40 total, once. Questions are well under a cent each.
-
-## Updating the app
-
-When you change files in `public/`, bump `CACHE` in `public/sw.js` (for example `scroll-v2`) so installed copies pick up the update.
+Scripture quotations are from the Berean Standard Bible (BSB), public domain.

@@ -2,3 +2,5 @@
 node_modules/
 .wrangler/
 .dev.vars
+build/__pycache__/
+build/curriculum/__pycache__/

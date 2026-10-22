@@ -1,41 +1,24 @@
-// Service worker: makes Scroll installable and usable offline.
-// App files are network-first (so updates show up right away) with a cached fallback.
-const CACHE = "scroll-v1";
-const SHELL = ["/", "/index.html", "/app.js", "/content.js", "/styles.css", "/manifest.webmanifest", "/icons/icon-192.png", "/icons/icon-512.png"];
+// Service worker: installable + offline. App files are network-first so updates show up right away;
+// Bible chapters are cache-first since the text never changes.
+const CACHE = "scroll-v2";
+const SHELL = ["./", "index.html", "app.js", "content.js", "styles.css", "manifest.webmanifest", "icons/icon-192.png", "icons/icon-512.png"];
 
-self.addEventListener("install", (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
-});
+self.addEventListener("install", (e) => e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting())));
+self.addEventListener("activate", (e) => e.waitUntil(
+  caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim())
+));
 
-self.addEventListener("activate", (e) => {
-  e.waitUntil(
-    caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim())
-  );
-});
+const put = (req, res) => { if (res.ok) { const c = res.clone(); caches.open(CACHE).then((x) => x.put(req, c)); } return res; };
 
 self.addEventListener("fetch", (e) => {
   const req = e.request;
   if (req.method !== "GET") return;
   const url = new URL(req.url);
-
-  if (url.origin === location.origin) {
-    if (url.pathname.startsWith("/api/")) return; // lessons are saved by the app itself
-    e.respondWith(
-      fetch(req)
-        .then((res) => {
-          if (res.ok) { const copy = res.clone(); caches.open(CACHE).then((c) => c.put(req, copy)); }
-          return res;
-        })
-        .catch(() => caches.match(req).then((hit) => hit || caches.match("/index.html")))
-    );
-    return;
-  }
-
-  if (url.hostname === "fonts.googleapis.com" || url.hostname === "fonts.gstatic.com") {
-    e.respondWith(
-      caches.match(req).then((hit) => hit || fetch(req).then((res) => {
-        const copy = res.clone(); caches.open(CACHE).then((c) => c.put(req, copy)); return res;
-      }))
-    );
+  const cacheFirst = url.pathname.includes("/bible/") || url.hostname.endsWith("gstatic.com") || url.hostname === "fonts.googleapis.com";
+  if (url.origin !== location.origin && !cacheFirst) return;
+  if (cacheFirst) {
+    e.respondWith(caches.match(req).then((hit) => hit || fetch(req).then((r) => put(req, r))));
+  } else {
+    e.respondWith(fetch(req).then((r) => put(req, r)).catch(() => caches.match(req).then((hit) => hit || caches.match("index.html"))));
   }
 });

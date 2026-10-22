@@ -1,274 +1,549 @@
-import{UNITS,BOOKS,VERSES,CHAPS,CH,TOTAL_CH,STORIES,PEOPLE,IDEAS,ALL_BS,clean,chName,spec,nextId,norm}from"./content.js";
-const PATHS=[
-{k:"story",name:"The Big Story",pre:"bs-",n:()=>ALL_BS.length,desc:"Start here. The whole Bible from Genesis to Revelation, in order, in 18 lessons."},
-{k:"books",name:"Book by Book",pre:"bk-",n:()=>66,desc:"One overview lesson for every book: who wrote it, what happens, and why it matters."},
-{k:"chapters",name:"Chapter by Chapter",pre:"ch-",n:()=>TOTAL_CH,desc:"Every chapter of every book. 1,189 lessons. Pick a book and go."},
-{k:"stories",name:"Famous Stories",pre:"st-",n:()=>STORIES.length,desc:"The stories everyone references, explained."},
-{k:"people",name:"People",pre:"pp-",n:()=>PEOPLE.length,desc:"Who's who, from Adam to Paul."},
-{k:"ideas",name:"Big Ideas",pre:"id-",n:()=>IDEAS.length,desc:"The concepts behind it all: covenant, grace, messiah, and more."}];
+import { SECTIONS, VERSES, BOOKS } from "./content.js";
 
+/* ---------- helpers ---------- */
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const rand = (n) => Math.floor(Math.random() * n);
+const shuffle = (a) => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = rand(i + 1); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+const pickN = (a, n) => shuffle(a).slice(0, n);
+const localDay = (d = new Date()) => { d = new Date(d); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10); };
+const today = () => localDay();
+const dayDiff = (a, b) => Math.round((new Date(b) - new Date(a)) / 864e5);
+const lsGet = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
+const lsSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
 
-/* helpers */
-const $=s=>document.querySelector(s);
-const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-const lsGet=k=>{try{return localStorage.getItem(k)}catch(e){return null}};
-const lsSet=(k,v)=>{try{localStorage.setItem(k,typeof v==="string"?v:JSON.stringify(v))}catch(e){}};
-const bg=ref=>"https://www.biblegateway.com/passage/?search="+encodeURIComponent(ref)+"&version=NLT";
-const ICON={star:'<svg viewBox="0 0 24 24"><path d="M12 2l2.9 6.6 7.1.6-5.4 4.7 1.6 7L12 17.3 5.8 21l1.6-7L2 9.2l7.1-.6z"/></svg>',check:'<svg viewBox="0 0 24 24"><path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg>',lock:'<svg viewBox="0 0 24 24"><path d="M12 2a5 5 0 0 1 5 5v3h1a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h1V7a5 5 0 0 1 5-5zm0 2a3 3 0 0 0-3 3v3h6V7a3 3 0 0 0-3-3z"/></svg>',book:'<svg viewBox="0 0 24 24"><path d="M4 4h6a3 3 0 0 1 2 1 3 3 0 0 1 2-1h6v15h-6a2 2 0 0 0-2 2 2 2 0 0 0-2-2H4z"/></svg>',user:'<svg viewBox="0 0 24 24"><path d="M12 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10zm0 2c-5 0-9 2.5-9 6v2h18v-2c0-3.5-4-6-9-6z"/></svg>',bulb:'<svg viewBox="0 0 24 24"><path d="M12 2a7 7 0 0 0-4 12.7V18h8v-3.3A7 7 0 0 0 12 2zM9 20h6v2H9z"/></svg>'};
-
-/* state */
-const KEY="scroll-bible-v1";
-let S={done:{},xp:0,streak:0,last:null,path:"story",book:0,planStart:null};
-try{const r=lsGet(KEY);if(r)S=Object.assign(S,JSON.parse(r))}catch(e){}
-const localDay=d=>{d=new Date(d);d.setMinutes(d.getMinutes()-d.getTimezoneOffset());return d.toISOString().slice(0,10)};
-const today=()=>localDay(new Date());
-const dayDiff=(a,b)=>Math.round((new Date(b)-new Date(a))/864e5);
-function liveStreak(){if(!S.last)return 0;return dayDiff(S.last,today())<=1?S.streak:0}
-const countPre=p=>Object.keys(S.done).filter(k=>k.startsWith(p)).length;
-
-/* backend: Cloudflare functions in /functions/api */
-const PASS_KEY="scroll-pass";
-const pass=()=>lsGet(PASS_KEY)||"";
-async function api(path,opts={}){
-  let r;try{r=await fetch(path,{...opts,headers:{"Content-Type":"application/json","X-Passcode":pass(),...(opts.headers||{})}})}catch(e){throw{code:"offline"}}
-  if(r.status===401)throw{code:"locked"};
-  if(r.status===429)throw{code:"rate_limited"};
-  if(!r.ok)throw{code:"server",status:r.status};
-  return r.json();
-}
-function merge(d){if(!d)return;Object.assign(S.done,d.done||{});S.xp=Math.max(S.xp,d.xp||0);if((d.last||"")>(S.last||"")){S.last=d.last;S.streak=d.streak||0}else if(d.last&&d.last===S.last)S.streak=Math.max(S.streak,d.streak||0);if(!S.planStart&&d.planStart)S.planStart=d.planStart}
-let pullP=Promise.resolve();
-function pull(){pullP=(async()=>{if(!pass())return;try{const d=await api("/api/progress");if(d&&d.progress){merge(d.progress);lsSet(KEY,S);rerender()}}catch(e){}})();return pullP}
-let pushT;
-function save(){lsSet(KEY,S);clearTimeout(pushT);pushT=setTimeout(async()=>{await pullP;if(!pass())return;try{await api("/api/progress",{method:"PUT",body:JSON.stringify({done:S.done,xp:S.xp,streak:S.streak,last:S.last,planStart:S.planStart||null})})}catch(e){}},1200)}
-
-const inflight={};
-function getLesson(id){
-  const s=spec(id);if(s.fixed)return Promise.resolve({cards:s.fixed.cards,q:s.fixed.q,ai:false});
-  const ck="scroll-L-"+id;
-  try{const r=lsGet(ck);if(r){const L=norm(JSON.parse(r));if(L)return Promise.resolve(L)}}catch(e){}
-  if(inflight[id])return inflight[id];
-  inflight[id]=(async()=>{
-    const d=await api("/api/lesson?id="+encodeURIComponent(id));
-    const L=norm(d&&d.lesson);if(!L)throw{code:"server"};
-    lsSet(ck,L);return L;
-  })();
-  inflight[id].finally(()=>{delete inflight[id]}).catch(()=>{});
-  return inflight[id];
-}
-
-/* plan */
-const dayCh=d=>CH.slice(Math.floor(d*TOTAL_CH/365),Math.floor((d+1)*TOTAL_CH/365));
-const chId=([b,c])=>"ch-"+b+"-"+c;
-function planDay(){return Math.min(364,Math.max(0,dayDiff(S.planStart,today())))}
-function rangeLabel(chs){const parts=[];chs.forEach(([b,c])=>{const last=parts[parts.length-1];if(last&&last.b===b&&last.e===c-1)last.e=c;else parts.push({b,s:c,e:c})});return parts.map(p=>chName(p.b)+" "+(p.s===p.e?p.s:p.s+"-"+p.e)).join(", ")}
-const dayDone=d=>dayCh(d).filter(x=>S.done[chId(x)]).length;
-
-/* rendering */
-let TAB="learn",planPick=null,libFilter="All",libQ="";
-function header(){$("#streak").textContent=liveStreak();$("#xp").textContent=S.xp}
-function rerender(){header();if($("#lesson").hidden)render()}
-function render(){document.querySelectorAll(".tabs button").forEach(b=>b.setAttribute("aria-selected",b.dataset.tab===TAB));({learn:renderLearn,plan:renderPlan,library:renderBooks,me:renderMe})[TAB]()}
-function tab(t){TAB=t;render();window.scrollTo(0,0)}
-document.querySelectorAll(".tabs button").forEach(b=>b.onclick=()=>tab(b.dataset.tab));
-
-function zig(items,offStart){
-  const off=[0,52,0,-52];
-  return `<div class="path">${items.map((it,i)=>{const done=S.done[it.id];const cls=(done?"done":it.locked?"locked":"")+(it.current?" current":"");return `<button class="node ${cls}" data-id="${it.id}" ${it.locked?'data-locked="1"':""} style="transform:translateX(${off[(i+(offStart||0))%4]}px)" aria-label="${esc(it.label)}${done?", completed":it.locked?", locked":""}"><span class="dot">${done?ICON.check:it.locked?ICON.lock:(it.icon||ICON.star)}</span><span class="lbl">${esc(it.label)}</span></button>`}).join("")}</div>`;
-}
-function grouped(list,pre,icon){
-  const groups=[];list.forEach((x,i)=>{const g=groups[groups.length-1];if(!g||g.name!==x[0])groups.push({name:x[0],items:[]});groups[groups.length-1].items.push({id:pre+i,label:x[1],icon})});
-  const nx=list.findIndex((_,i)=>!S.done[pre+i]);if(nx>=0)groups.forEach(g=>g.items.forEach(it=>{if(it.id===pre+nx)it.current=true}));
-  return groups.map((g,gi)=>`<section class="group"><div class="group-h">${esc(g.name)}<span>${g.items.filter(it=>S.done[it.id]).length}/${g.items.length}</span></div>${zig(g.items,gi)}</section>`).join("");
-}
-function todayInfo(){
-  if(S.planStart){const d=planDay(),chs=dayCh(d),nx=chs.find(x=>!S.done[chId(x)]);return{eyebrow:"Bible in a Year · Day "+(d+1),title:rangeLabel(chs),sub:nx?dayDone(d)+" of "+chs.length+" chapters done today":"Today's reading is done",id:nx?chId(nx):null,btn:dayDone(d)?"Continue":"Start"}}
-  const nx=ALL_BS.find(x=>!S.done[x]);
-  if(nx){const s=spec(nx);return{eyebrow:"Next lesson",title:s.title,sub:s.group+" · The Big Story",id:nx,btn:countPre("bs-")?"Continue":"Start"}}
-  return{eyebrow:"Keep going",title:"Read the whole Bible",sub:"Start the Bible in a Year plan on the Daily tab.",id:null}
-}
-function renderLearn(){
-  const t=todayInfo(),doneToday=S.last===today(),C=2*Math.PI*22;
-  const v=VERSES[Math.floor(Date.now()/864e5)%VERSES.length];
-  const P=PATHS.find(p=>p.k===S.path)||PATHS[0];
-  let h=`<section class="today"><div style="min-width:0"><div class="eyebrow">${esc(t.eyebrow)}</div><h2>${esc(t.title)}</h2><p>${esc(t.sub)}</p></div>
-  <svg class="ring" viewBox="0 0 56 56" role="img" aria-label="${doneToday?"Daily goal met":"Daily goal not met yet"}"><circle cx="28" cy="28" r="22" fill="none" stroke="currentColor" stroke-opacity=".25" stroke-width="6"/><circle cx="28" cy="28" r="22" fill="none" stroke="currentColor" stroke-width="6" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${doneToday?0:C}" transform="rotate(-90 28 28)"/></svg>
-  ${t.id?`<button data-id="${t.id}" style="grid-column:1/-1">${t.btn}</button>`:`<button data-tab-go="plan" style="grid-column:1/-1">Open Daily</button>`}</section>
-  <div class="verse"><div class="ref">VERSE OF THE DAY · ${v[0]}</div><p>${v[1]}</p></div>
-  <div class="paths" role="group" aria-label="Choose a path">${PATHS.map(p=>{const n=p.n(),d=countPre(p.pre);return `<button class="pcard" data-path="${p.k}" aria-pressed="${p.k===P.k}"><b>${p.name}</b><small>${d.toLocaleString()} / ${n.toLocaleString()}</small><span class="pbar"><i style="width:${d/n*100}%"></i></span></button>`}).join("")}</div>
-  <h2 class="ptitle">${P.name}</h2><p class="pdesc">${P.desc}</p>`;
-  if(P.k==="story"){
-    UNITS.forEach((u,ui)=>{const items=u.lessons.map((l,li)=>{const id="bs-"+ui+"-"+li,i=ALL_BS.indexOf(id);return{id,label:l.t,locked:i>0&&!S.done[ALL_BS[i-1]]&&!S.done[id],current:ALL_BS.find(x=>!S.done[x])===id}});h+=`<section class="group"><div class="group-h">${u.t}<span>${u.ref}</span></div><p class="unit-sub">${u.sub}</p>${zig(items,ui)}</section>`});
-  }else if(P.k==="books"){
-    h+=grouped(BOOKS.map((b,i)=>[(i<39?"Old Testament: ":"New Testament: ")+b[0],b[1]]),"bk-",ICON.book);
-  }else if(P.k==="chapters"){
-    const b=S.book,n=CHAPS[b],nx=[...Array(n)].findIndex((_,i)=>!S.done["ch-"+b+"-"+(i+1)]);
-    h+=`<div class="row"><button class="btn" id="prevBook" aria-label="Previous book" ${b===0?"disabled":""}>‹</button><select class="sel" id="bookSel" aria-label="Book">${BOOKS.map((B,i)=>{const d=countPre("ch-"+i+"-");return `<option value="${i}" ${i===b?"selected":""}>${B[1]}  (${d}/${CHAPS[i]})</option>`}).join("")}</select><button class="btn" id="nextBook" aria-label="Next book" ${b===65?"disabled":""}>›</button></div>
-    <div class="bookmeta"><b>${BOOKS[b][1]}</b><p>${BOOKS[b][2]} ${n} chapter${n>1?"s":""}.</p><div class="row" style="margin-top:4px"><button class="btn primary" data-id="${nx>=0?"ch-"+b+"-"+(nx+1):"ch-"+b+"-1"}">${nx>=0?(nx?"Continue: ":"Start: ")+chName(b)+" "+(nx+1):"Review chapter 1"}</button><button class="btn" data-id="bk-${b}">${S.done["bk-"+b]?"Overview ✓":"Book overview"}</button></div></div>
-    <div class="chgrid">${[...Array(n)].map((_,i)=>{const id="ch-"+b+"-"+(i+1);return `<button class="ch ${S.done[id]?"done":i===nx?"next":""}" data-id="${id}" aria-label="${chName(b)} ${i+1}${S.done[id]?", completed":""}">${i+1}</button>`}).join("")}</div>`;
-  }else if(P.k==="stories")h+=grouped(STORIES,"st-",ICON.star);
-  else if(P.k==="people")h+=grouped(PEOPLE,"pp-",ICON.user);
-  else if(P.k==="ideas")h+=grouped(IDEAS,"id-",ICON.bulb);
-  $("#view").innerHTML=h;
-  const bs=$("#bookSel");if(bs){bs.onchange=()=>{S.book=+bs.value;save();renderLearn()};$("#prevBook").onclick=()=>{S.book--;save();renderLearn()};$("#nextBook").onclick=()=>{S.book++;save();renderLearn()}}
-}
-
-function renderPlan(){
-  if(!S.planStart){
-    $("#view").innerHTML=`<section class="intro"><div class="kind">Daily</div><h2>Read the whole Bible in a year</h2><p>365 days, Genesis 1 to Revelation 22. Three or four chapters a day. Each chapter is a short lesson with a quiz, plus a link to read the full text.</p><p>Day 1 is ${rangeLabel(dayCh(0))}.</p><button class="go" id="startPlan">Start today</button></section>`;
-    $("#startPlan").onclick=()=>{S.planStart=today();save();renderPlan()};return;
-  }
-  const now=planDay(),d=planPick==null?now:planPick,chs=dayCh(d);
-  const planDone=CH.filter(x=>S.done[chId(x)]).length;
-  const behind=[...Array(now)].map((_,i)=>i).filter(i=>dayDone(i)<dayCh(i).length).length;
-  let h=`<div class="plan-head"><div class="kind">Bible in a Year</div><h2>Day ${d+1}${d===now?"":(d<now?" (past)":" (ahead)")}</h2><p>${planDone} of ${TOTAL_CH.toLocaleString()} chapters done${behind?" · "+behind+" earlier day"+(behind>1?"s":"")+" unfinished":""}</p></div>
-  <div class="daylist">${chs.map(x=>{const id=chId(x),ref=BOOKS[x[0]][1]+" "+x[1];return `<div class="dayitem ${S.done[id]?"done":""}"><span class="st">${S.done[id]?ICON.check:""}</span><div style="min-width:0"><b>${chName(x[0])} ${x[1]}</b><a href="${bg(ref)}" target="_blank" rel="noopener">Read full text ↗</a></div><button class="btn ${S.done[id]?"":"primary"}" data-id="${id}">${S.done[id]?"Review":"Lesson"}</button></div>`}).join("")}</div>
-  <div class="row">${d!==now?`<button class="btn" id="toToday">Back to today</button>`:""}</div>
-  <section class="group"><div class="group-h">All 365 days<span>${[...Array(365)].filter((_,i)=>dayDone(i)===dayCh(i).length).length} complete</span></div>
-  <div class="heat">${[...Array(365)].map((_,i)=>{const dd=dayDone(i),n=dayCh(i).length;return `<button class="${dd===n?"full":dd?"part":""} ${i===now?"now":""} ${i===d?"picked":""}" data-day="${i}" aria-label="Day ${i+1}: ${rangeLabel(dayCh(i))}, ${dd} of ${n} done" title="Day ${i+1}: ${rangeLabel(dayCh(i))}"></button>`}).join("")}</div>
-  <div class="legend"><span><i style="background:var(--gold)"></i>Done</span><span><i style="background:color-mix(in srgb,var(--gold) 40%,var(--line))"></i>Started</span><span><i style="box-shadow:inset 0 0 0 2px var(--accent)"></i>Today</span></div></section>
-  <button class="reset" id="restartPlan">Restart plan from today</button>`;
-  $("#view").innerHTML=h;
-  $("#view").querySelectorAll("[data-day]").forEach(b=>b.onclick=()=>{planPick=+b.dataset.day;renderPlan()});
-  const tt=$("#toToday");if(tt)tt.onclick=()=>{planPick=null;renderPlan()};
-  let armed=false;$("#restartPlan").onclick=e=>{if(!armed){armed=true;e.target.textContent="Tap again to restart at Day 1 (lesson progress is kept)";return}S.planStart=today();planPick=null;save();renderPlan()};
-}
-
-function renderBooks(){
-  const groups={};BOOKS.forEach((b,i)=>{const t=i<39?"Old":"New";if(libFilter!=="All"&&libFilter!==t)return;if(libQ&&!(b[1]+" "+b[2]).toLowerCase().includes(libQ))return;const k=t+"|"+b[0];(groups[k]=groups[k]||[]).push(i)});
-  let h=`<div class="lib-top">${["All","Old","New"].map(f=>`<button class="chip" data-f="${f}" aria-pressed="${f===libFilter}">${f==="All"?"All 66":f+" Testament"}</button>`).join("")}</div>
-  <input class="search" id="q" type="search" placeholder="Search books or topics" value="${esc(libQ)}" aria-label="Search books">`;
-  const keys=Object.keys(groups);
-  if(!keys.length)h+=`<p style="color:var(--muted);margin-top:24px">No books match "${esc(libQ)}".</p>`;
-  keys.forEach(k=>{const[t,s]=k.split("|");h+=`<section class="section"><h4><span>${s}</span><span>${t} Testament · ${groups[k].length}</span></h4><div class="books">${groups[k].map(i=>{const b=BOOKS[i],d=countPre("ch-"+i+"-");return `<button class="book bookrow" data-book="${i}"><span class="n">${i+1}</span><b>${b[1]}</b><span>${b[2]} <span style="font-family:var(--mono);font-size:12px">${d}/${CHAPS[i]} ch</span></span><span class="mini"><i style="width:${d/CHAPS[i]*100}%"></i></span></button>`}).join("")}</div></section>`});
-  $("#view").innerHTML=h;
-  $("#view").querySelectorAll(".chip").forEach(c=>c.onclick=()=>{libFilter=c.dataset.f;renderBooks()});
-  $("#view").querySelectorAll("[data-book]").forEach(c=>c.onclick=()=>{S.book=+c.dataset.book;S.path="chapters";save();tab("learn")});
-  const q=$("#q");q.oninput=()=>{libQ=q.value.toLowerCase();const pos=q.selectionStart;renderBooks();const n=$("#q");n.focus();n.setSelectionRange(pos,pos)};
-}
-
-function renderMe(){
-  const total=Object.keys(S.done).length,chd=countPre("ch-");
-  const booksTouched=BOOKS.filter((_,i)=>countPre("ch-"+i+"-")>0).length;
-  const booksFull=BOOKS.filter((_,i)=>countPre("ch-"+i+"-")===CHAPS[i]).length;
-  const otCh=CH.filter(x=>x[0]<39&&S.done[chId(x)]).length,ntCh=chd-otCh;
-  let h=`<div class="tiles"><div class="tile"><small>Total XP</small><b>${S.xp.toLocaleString()}</b></div><div class="tile"><small>Day streak</small><b>${liveStreak()}</b></div><div class="tile"><small>Lessons done</small><b>${total.toLocaleString()}</b></div><div class="tile"><small>Books finished</small><b>${booksFull}/66</b></div></div>
-  <section class="group"><div class="group-h">Whole Bible<span>${chd}/${TOTAL_CH} chapters</span></div><div class="bars">
-  ${[["Old Testament",otCh,929],["New Testament",ntCh,260],["Books started",booksTouched,66]].map(([l,d,n])=>`<div class="barrow">${l}<span>${d}/${n}</span><span class="pbar"><i style="width:${d/n*100}%"></i></span></div>`).join("")}</div></section>
-  <section class="group"><div class="group-h">Paths<span>${PATHS.length}</span></div><div class="bars">
-  ${PATHS.map(p=>{const d=countPre(p.pre),n=p.n();return `<div class="barrow">${p.name}<span>${d}/${n.toLocaleString()}</span><span class="pbar"><i style="width:${d/n*100}%"></i></span></div>`}).join("")}</div></section>
-  <section class="group"><div class="group-h">Sync<span>${pass()?"On":"Off"}</span></div>
-  <p class="note">${pass()?"Your passcode is set on this device. Progress syncs between your phone and computer, and new lessons can be written.":"Enter your passcode to sync progress across devices and unlock writing new lessons."}</p>
-  <form class="row" id="passForm"><input class="sel" id="passSet" type="password" placeholder="${pass()?"Change passcode":"Passcode"}" aria-label="Passcode" autocomplete="current-password"><button class="btn primary" type="submit">Save</button>${pass()?`<button class="btn" type="button" id="passClear">Sign out</button>`:""}</form></section>
-  <button class="reset" id="reset">Reset all progress</button>`;
-  $("#view").innerHTML=h;
-  $("#passForm").onsubmit=e=>{e.preventDefault();const v=$("#passSet").value.trim();if(!v)return;lsSet(PASS_KEY,v);pull().then(()=>{save();renderMe()})};
-  const pc=$("#passClear");if(pc)pc.onclick=()=>{try{localStorage.removeItem(PASS_KEY)}catch(e){}renderMe()};
-  let armed=false;$("#reset").onclick=e=>{if(!armed){armed=true;e.target.textContent="Tap again to erase all progress";return}S={done:{},xp:0,streak:0,last:null,path:"story",book:0,planStart:null};save();rerender()};
-}
-
-/* global clicks */
-$("#view").addEventListener("click",e=>{
-  const p=e.target.closest("[data-path]");if(p){S.path=p.dataset.path;save();renderLearn();const t=$(".ptitle");if(t)t.scrollIntoView({block:"start",behavior:"smooth"});return}
-  const g=e.target.closest("[data-tab-go]");if(g){tab(g.dataset.tabGo);return}
-  const n=e.target.closest("[data-id]");if(n&&!n.dataset.locked)startLesson(n.dataset.id);
-});
-
-/* lesson engine */
-let L=null,chat=[];
-function shuffleQ(q){const idx=q[1].map((_,i)=>i).sort(()=>Math.random()-.5);return{q:q[0],opts:idx.map(i=>q[1][i]),ans:idx.indexOf(q[2]),why:q[3]}}
-function showLoading(s){
-  $("#lbody").innerHTML=`<div class="loading"><div class="spin" aria-hidden="true"></div><div class="kind">${esc(s.group)}</div><div class="card-h" style="margin:0">${esc(s.title)}</div><p>Writing this lesson. It takes a few seconds the first time, then it's saved.</p></div>`;
-  $("#foot").hidden=true;$("#askOpen").hidden=true;$("#progbar").style.width="0";
-}
-function showError(s,err){
-  const code=err&&err.code;
-  const msg=code==="locked"?"This lesson hasn't been written yet. Enter your passcode to unlock lesson writing on this device.":code==="offline"?"You're offline and this lesson isn't saved on this device yet. Connect and try again.":code==="rate_limited"?"Too many requests. Wait a minute and try again.":"Something went wrong writing this lesson. Try again.";
-  $("#lbody").innerHTML=`<div class="loading"><div class="kind">${esc(s.title)}</div><p>${msg}</p>${code==="locked"?`<input class="search" id="passIn" type="password" placeholder="Passcode" aria-label="Passcode" style="max-width:280px" autocomplete="current-password">`:""}</div>`;
-  if(code==="locked"){const pi=$("#passIn");pi.focus();pi.onkeydown=e=>{if(e.key==="Enter")$("#go").click()}}
-  const foot=$("#foot");foot.hidden=false;foot.className="foot";$("#fb").hidden=true;
-  const go=$("#go");go.disabled=false;go.textContent=code==="locked"?"Unlock":"Try again";go.onclick=()=>{const pi=$("#passIn");if(pi&&pi.value.trim()){lsSet(PASS_KEY,pi.value.trim());pull();save()}startLesson(s.id)};
-  const alt=$("#alt");alt.hidden=false;alt.textContent="Back";alt.onclick=close;
-}
-async function startLesson(id){
-  const s=spec(id);if(!s)return;
-  $("#lesson").hidden=false;document.body.style.overflow="hidden";$("#sheet").hidden=true;$("#alt").hidden=true;chat=[];$("#thread").innerHTML="";
-  L={id,s,loading:true};showLoading(s);
-  let les;try{les=await getLesson(id)}catch(err){if(L&&L.id===id)showError(s,err);return}
-  if(!L||L.id!==id)return;
-  const steps=[...les.cards.map(c=>({type:"card",c})),...les.q.map(q=>({type:"q",...shuffleQ(q)}))];
-  L={id,s,les,steps,pos:0,sel:null,checked:false,correct:0};
-  $("#foot").hidden=false;$("#askOpen").hidden=false;drawStep();
-  const nx=nextId(id);if(nx&&les.ai)getLesson(nx).catch(()=>{});
-}
-function drawStep(){
-  const st=L.steps[L.pos],foot=$("#foot"),fb=$("#fb"),go=$("#go");
-  foot.className="foot";fb.hidden=true;L.sel=null;L.checked=false;$("#alt").hidden=true;
-  $("#progbar").style.width=(L.pos/L.steps.length*100)+"%";
-  const body=$("#lbody"),ai=L.les.ai,T=x=>ai?esc(x):x;
-  if(st.type==="card"){
-    const n=L.les.cards.length,k=L.pos+1;
-    body.innerHTML=`<div class="kind">${esc(L.s.group)} · Read ${k} of ${n}</div><h2 class="card-h">${T(st.c.h)}</h2><div class="card-b">${st.c.b.map(p=>`<p>${T(p)}</p>`).join("")}${st.c.ref?`<span class="card-ref">${T(st.c.ref)}</span>`:""}</div>${k===1&&L.s.ref?`<a class="readlink" href="${bg(L.s.ref)}" target="_blank" rel="noopener">Read ${esc(L.s.ref)} ↗</a>`:""}`;
-    go.disabled=false;go.textContent="Continue";go.onclick=advance;
-  }else{
-    body.innerHTML=`<div class="kind">${st.retry?"Try again":"Question"}</div><h2 class="card-h">${T(st.q)}</h2><div class="opts">${st.opts.map((o,j)=>`<button class="opt" data-j="${j}" aria-pressed="false">${T(o)}</button>`).join("")}</div>`;
-    go.disabled=true;go.textContent="Check";
-    body.querySelectorAll(".opt").forEach(b=>b.onclick=()=>pick(+b.dataset.j));
-    go.onclick=()=>{if(!L.checked)check();else advance()};
-  }
-  $("#lscroll").scrollTop=0;
-}
-function pick(j){if(!L||L.checked||!L.steps||L.steps[L.pos].type!=="q")return;const os=$("#lbody").querySelectorAll(".opt");if(!os[j])return;os.forEach(x=>x.setAttribute("aria-pressed","false"));os[j].setAttribute("aria-pressed","true");L.sel=j;$("#go").disabled=false}
-function check(){
-  const st=L.steps[L.pos];L.checked=true;const ok=L.sel===st.ans,T=x=>L.les.ai?esc(x):x;
-  $("#lbody").querySelectorAll(".opt").forEach((b,j)=>{b.disabled=true;if(j===st.ans)b.classList.add("right");else if(j===L.sel)b.classList.add("wrong")});
-  if(ok){if(!st.retry)L.correct++}else L.steps.push({...st,retry:true});
-  $("#foot").className="foot "+(ok?"good":"bad");
-  const fb=$("#fb");fb.hidden=false;fb.innerHTML=`<strong>${ok?"Correct":"Answer: "+T(st.opts[st.ans])}</strong><span>${T(st.why)}</span>`;
-  $("#go").textContent="Continue";
-}
-function advance(){L.pos++;if(L.pos>=L.steps.length)finish();else drawStep()}
-function finish(){
-  const first=!S.done[L.id],total=L.les.q.length,gain=first?10+L.correct*5:5;
-  S.xp+=gain;S.done[L.id]=true;
-  const t=today();if(S.last!==t){S.streak=S.last&&dayDiff(S.last,t)===1?S.streak+1:1;S.last=t}
-  save();header();
-  $("#progbar").style.width="100%";
-  const nx=nextId(L.id);
-  $("#lbody").innerHTML=`<div class="done-screen"><div class="kind">Lesson complete</div><div class="big">${esc(L.s.title)}</div><p style="color:var(--muted)">${L.correct===total?"Perfect run.":"Missed ones came back until you got them."}</p>
-  <div class="tiles"><div class="tile"><small>XP earned</small><b>+${gain}</b></div><div class="tile"><small>First try</small><b>${L.correct}/${total}</b></div><div class="tile"><small>Day streak</small><b>${S.streak}</b></div><div class="tile"><small>Chapters read</small><b>${countPre("ch-")}/${TOTAL_CH}</b></div></div></div>`;
-  $("#foot").className="foot";$("#fb").hidden=true;
-  const go=$("#go"),alt=$("#alt");go.disabled=false;
-  if(nx){go.textContent="Next: "+spec(nx).title;go.onclick=()=>startLesson(nx);alt.hidden=false;alt.textContent="Back to path";alt.onclick=close}
-  else{go.textContent="Back to path";go.onclick=close;alt.hidden=true}
-}
-function close(){$("#lesson").hidden=true;$("#sheet").hidden=true;document.body.style.overflow="";L=null;render()}
-$("#quit").onclick=close;
-
-/* ask */
-$("#askOpen").onclick=()=>{$("#sheet").hidden=false;$("#askInput").focus()};
-$("#askClose").onclick=()=>{$("#sheet").hidden=true};
-$("#askForm").onsubmit=async e=>{
-  e.preventDefault();const inp=$("#askInput"),q=inp.value.trim();if(!q||!L||!L.les)return;
-  inp.value="";const th=$("#thread");
-  const me=document.createElement("div");me.className="msg me";me.textContent=q;th.append(me);
-  const ai=document.createElement("div");ai.className="msg ai";ai.textContent="Thinking...";th.append(ai);th.scrollTop=th.scrollHeight;
-  chat.push({role:"user",content:q});
-  $("#askSend").disabled=true;
-  try{
-    const r=await api("/api/ask",{method:"POST",body:JSON.stringify({id:L.id,messages:chat.slice(-12)})});
-    ai.textContent=clean(r.text);chat.push({role:"assistant",content:r.text});
-  }catch(err){chat.pop();ai.textContent=err&&err.code==="locked"?"Questions need your passcode. Add it on the Progress tab.":err&&err.code==="offline"?"You're offline. Connect and try again.":err&&err.code==="rate_limited"?"Too many questions at once. Try again in a minute.":"Couldn't get an answer. Try again."}
-  $("#askSend").disabled=false;th.scrollTop=th.scrollHeight;
+const I = {
+  flame: '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M13.6 1.2s1.2 3.7-1.4 6.8C9.9 10.8 8 12.2 8 15a4 4 0 0 0 8 0c0-1.3-.6-2.4-.6-2.4s3.6 1.7 3.6 5.6A7 7 0 0 1 12 23a7 7 0 0 1-7-7c0-5.6 4.2-7.6 6-10.8 1.5-2.6 2.6-4 2.6-4z"/></svg>',
+  xp: '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M13 2 4 14h6l-1 8 9-12h-6z"/></svg>',
+  heart: '<svg viewBox="0 0 24 24"><path d="M12 21.3 10.6 20C5.4 15.4 2 12.3 2 8.5 2 5.4 4.4 3 7.5 3c1.7 0 3.4.8 4.5 2.1A6 6 0 0 1 16.5 3C19.6 3 22 5.4 22 8.5c0 3.8-3.4 6.9-8.6 11.5z"/></svg>',
+  heartO: '<svg viewBox="0 0 24 24"><path d="M16.5 3A6 6 0 0 0 12 5.1 6 6 0 0 0 7.5 3C4.4 3 2 5.4 2 8.5c0 3.8 3.4 6.9 8.6 11.5l1.4 1.3 1.4-1.3C18.6 15.4 22 12.3 22 8.5 22 5.4 19.6 3 16.5 3zm-4.4 15.6-.1.1-.1-.1C7.1 14.2 4 11.4 4 8.5 4 6.5 5.5 5 7.5 5c1.5 0 3 1 3.6 2.4h1.9C13.5 6 15 5 16.5 5c2 0 3.5 1.5 3.5 3.5 0 2.9-3.1 5.7-7.9 10.1z"/></svg>',
+  chev: '<svg viewBox="0 0 24 24"><path d="M7.4 8.6 12 13.2l4.6-4.6L18 10l-6 6-6-6z"/></svg>',
+  star: '<svg viewBox="0 0 24 24"><path d="M12 2.5l2.9 6.2 6.8.7-5.1 4.6 1.5 6.7L12 17.3 5.9 20.7l1.5-6.7-5.1-4.6 6.8-.7z"/></svg>',
+  check: '<svg viewBox="0 0 24 24"><path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg>',
+  lock: '<svg viewBox="0 0 24 24"><path d="M12 2a5 5 0 0 1 5 5v3h1a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h1V7a5 5 0 0 1 5-5zm0 2a3 3 0 0 0-3 3v3h6V7a3 3 0 0 0-3-3z"/></svg>',
+  trophy: '<svg viewBox="0 0 24 24"><path d="M7 3h10v2h4v3a5 5 0 0 1-4.6 5A5 5 0 0 1 13 15.9V18h3v3H8v-3h3v-2.1A5 5 0 0 1 7.6 13 5 5 0 0 1 3 8V5h4zm10 4v4a3 3 0 0 0 2-3V7zM5 7v1a3 3 0 0 0 2 3V7z"/></svg>',
+  x: '<svg viewBox="0 0 24 24"><path d="M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12l5.6 5.6-1.4 1.4-5.6-5.6L6.4 19 5 17.6 10.6 12 5 6.4z"/></svg>',
+  copy: '<svg viewBox="0 0 24 24"><path d="M16 1H4a2 2 0 0 0-2 2v14h2V3h12zm3 4H8a2 2 0 0 0-2 2v14c0 1.1.9 2 2 2h11a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2zm0 16H8V7h11z"/></svg>',
+  trash: '<svg viewBox="0 0 24 24"><path d="M9 3h6l1 2h4v2H4V5h4zm-3 5h12l-1 13H7z"/></svg>',
+  learn: '<svg viewBox="0 0 24 24"><path d="M12 3 2 8l10 5 8-4v6h2V8zM6 12.2V16c0 1.7 2.7 3 6 3s6-1.3 6-3v-3.8l-6 3z"/></svg>',
+  book: '<svg viewBox="0 0 24 24"><path d="M3 4h7a3 3 0 0 1 2 .8A3 3 0 0 1 14 4h7v15h-7a2 2 0 0 0-2 2 2 2 0 0 0-2-2H3zm2 2v11h5c.7 0 1.4.2 2 .5V7a1 1 0 0 0-1-1zm14 0h-6a1 1 0 0 0-1 1v10.5c.6-.3 1.3-.5 2-.5h5z"/></svg>',
+  user: '<svg viewBox="0 0 24 24"><path d="M12 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10zm0 2c-5 0-9 2.5-9 6v2h18v-2c0-3.5-4-6-9-6z"/></svg>',
+  cross: '<svg viewBox="0 0 24 24"><path d="M10 2h4v6h6v4h-6v10h-4V12H4V8h6z"/></svg>',
+  tablets: '<svg viewBox="0 0 24 24"><path d="M2 21V7a5 5 0 0 1 9.5-2.2V21zm10.5 0V4.8A5 5 0 0 1 22 7v14z"/></svg>',
+  letter: '<svg viewBox="0 0 24 24"><path d="M3 5h18v14H3zm2 2v.6l7 5 7-5V7z"/></svg>',
+  compass: '<svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm4 6-2.7 5.3L8 16l2.7-5.3z"/></svg>',
+  spark: '<svg viewBox="0 0 24 24"><path d="M12 1l2.4 7.6L22 11l-7.6 2.4L12 21l-2.4-7.6L2 11l7.6-2.4zM19 15l1 3 3 1-3 1-1 3-1-3-3-1 3-1z"/></svg>',
+  arrowL: '<svg viewBox="0 0 24 24"><path d="M15.4 7.4 10.8 12l4.6 4.6L14 18l-6-6 6-6z"/></svg>',
+  arrowR: '<svg viewBox="0 0 24 24"><path d="M8.6 16.6 13.2 12 8.6 7.4 10 6l6 6-6 6z"/></svg>',
+  bulb: '<svg viewBox="0 0 24 24"><path d="M12 2a7 7 0 0 0-4 12.7V18h8v-3.3A7 7 0 0 0 12 2zM9 20h6v2H9z"/></svg>',
+  q: '<svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm1 17h-2v-2h2zm2-7.7-.9.9c-.7.8-1.1 1.3-1.1 2.8h-2v-.5c0-1.1.4-2.1 1.2-2.8l1.2-1.3c.4-.4.6-.9.6-1.4a2 2 0 0 0-4 0H8a4 4 0 0 1 8 0c0 .9-.4 1.7-1 2.3z"/></svg>',
 };
-$("#askInput").addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();$("#askForm").requestSubmit()}});
+const SEC_ICON = { journey: I.compass, ot: I.tablets, nt: I.letter, gospels: I.cross, stories: I.spark };
 
-document.addEventListener("keydown",e=>{
-  if(!L||$("#lesson").hidden||!$("#sheet").hidden)return;
-  if(e.key==="Escape")close();
-  else if(/^[1-4]$/.test(e.key))pick(+e.key-1);
-  else if(e.key==="Enter"&&!$("#go").disabled&&document.activeElement.tagName!=="BUTTON"&&!$("#foot").hidden)$("#go").click();
+/* ---------- content indexes ---------- */
+const SEC = Object.fromEntries(SECTIONS.map((s) => [s.id, s]));
+const LESSON = {};
+const NODES = {}; // section id -> [{id, kind:'lesson'|'review', ui, li}]
+for (const s of SECTIONS) {
+  NODES[s.id] = [];
+  s.units.forEach((u, ui) => {
+    u.lessons.forEach((l, li) => { LESSON[l.id] = { sec: s, ui, li, l }; NODES[s.id].push({ id: l.id, kind: "lesson", ui, li }); });
+    NODES[s.id].push({ id: `R:${s.id}-${ui}`, kind: "review", ui });
+  });
+}
+const BOOK_IX = Object.fromEntries(BOOKS.map((b, i) => [b.name, i]));
+BOOK_IX["Psalm"] = BOOK_IX["Psalms"];
+const refBook = (i) => (BOOKS[i].name === "Psalms" ? "Psalm" : BOOKS[i].name);
+const parseRef = (ref) => {
+  const m = /^(.+) (\d+):(\d+)(?:-(\d+))?$/.exec(ref || "");
+  if (!m || BOOK_IX[m[1]] == null) return null;
+  return { b: BOOK_IX[m[1]], c: +m[2], v1: +m[3], v2: m[4] ? +m[4] : +m[3] };
+};
+
+const STOP = new Set("the and that with from this have will shall were been your yours they them their there then than into unto upon which what when where whom whose also because not but are was his her him you our ours those these every each said says like even just only very more most some such would could should about over through before after let may might must being again away does done doing made make came come went going yet nor both all any one out its it’s whoever whatever anyone neither either here now how why own can has had did therefore among against i’m who for thus them, until while within without whether toward towards".split(/\s+/));
+const core = (w) => w.replace(/^[^\p{L}’']+|[^\p{L}’']+$/gu, "");
+const passageText = (ref) => {
+  const v = VERSES[ref];
+  if (v) return v.v.map((x) => x[1]).join(" ");
+  const s = S.saved[ref];
+  return s ? s.t : "";
+};
+const POOL = (() => {
+  const m = new Map();
+  for (const k in VERSES) for (const w of passageText(k).split(/\s+/)) {
+    const c = core(w);
+    if (c.length >= 4 && c.length <= 12 && c === c.toLowerCase() && !STOP.has(c) && !/[’']/.test(c)) m.set(c, c);
+  }
+  return [...m.values()];
+})();
+const ALL_REFS = Object.keys(VERSES);
+const VOTD_REFS = ALL_REFS.filter((r) => VERSES[r].v.length === 1 && passageText(r).length < 200);
+
+/* ---------- state ---------- */
+const KEY = "scroll-v2";
+const fresh = () => ({ done: {}, xp: 0, days: {}, streak: 0, best: 0, last: null, goal: 20, section: "journey", saved: {}, reader: { b: 42, c: 1 }, sound: true });
+let S = fresh();
+try { const raw = lsGet(KEY); if (raw) S = Object.assign(fresh(), JSON.parse(raw)); } catch {}
+const save = () => lsSet(KEY, S);
+const liveStreak = () => (S.last && dayDiff(S.last, today()) <= 1 ? S.streak : 0);
+const xpToday = () => S.days[today()] || 0;
+const isDone = (id) => !!S.done[id];
+const secProgress = (sid) => { const n = NODES[sid].filter((x) => x.kind === "lesson"); return [n.filter((x) => isDone(x.id)).length, n.length]; };
+const nodeOpen = (sid, i) => i === 0 || isDone(NODES[sid][i - 1].id) || isDone(NODES[sid][i].id);
+const currentIndex = (sid) => NODES[sid].findIndex((x) => !isDone(x.id));
+
+/* ---------- sound ---------- */
+let AC = null;
+function beep(ok) {
+  if (!S.sound) return;
+  try {
+    AC = AC || new (window.AudioContext || window.webkitAudioContext)();
+    const t = AC.currentTime, notes = ok ? [[660, 0], [880, 0.09]] : [[220, 0], [180, 0.12]];
+    for (const [f, d] of notes) {
+      const o = AC.createOscillator(), g = AC.createGain();
+      o.type = ok ? "sine" : "triangle"; o.frequency.value = f;
+      g.gain.setValueAtTime(0.0001, t + d); g.gain.exponentialRampToValueAtTime(0.18, t + d + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + d + 0.18);
+      o.connect(g).connect(AC.destination); o.start(t + d); o.stop(t + d + 0.2);
+    }
+  } catch {}
+}
+
+/* ---------- toast + sheet ---------- */
+let toastT;
+function toast(msg, action) {
+  $(".toast")?.remove(); clearTimeout(toastT);
+  const t = document.createElement("div"); t.className = "toast"; t.setAttribute("role", "status");
+  t.innerHTML = `<span>${esc(msg)}</span>${action ? `<button type="button">${esc(action.label)}</button>` : ""}`;
+  if (action) t.querySelector("button").onclick = () => { action.run(); t.remove(); };
+  document.body.append(t); toastT = setTimeout(() => t.remove(), 3500);
+}
+function sheet(html, onMount, color) {
+  closeSheet();
+  const s = document.createElement("div"); s.className = "scrim"; s.id = "scrim";
+  if (color) s.dataset.c = color;
+  s.innerHTML = `<div class="sheet" role="dialog" aria-modal="true"><div class="grab"></div>${html}</div>`;
+  s.addEventListener("click", (e) => { if (e.target === s) closeSheet(); });
+  document.body.append(s); onMount && onMount(s);
+  const f = s.querySelector("button, input"); f && f.focus({ preventScroll: true });
+}
+function closeSheet() { $("#scrim")?.remove(); }
+
+/* ---------- saved verses ---------- */
+const isSaved = (ref) => !!S.saved[ref];
+function toggleSave(ref, text) {
+  if (S.saved[ref]) {
+    const old = S.saved[ref]; delete S.saved[ref]; save();
+    toast("Removed from saved", { label: "Undo", run: () => { S.saved[ref] = old; save(); refresh(); } });
+  } else {
+    S.saved[ref] = { t: text || passageText(ref), at: new Date().toISOString(), note: "" }; save();
+    toast("Saved to your verses");
+  }
+  return isSaved(ref);
+}
+async function copyVerse(ref, text) {
+  const s = `“${text}” ${ref} (BSB)`;
+  try { await navigator.clipboard.writeText(s); toast("Copied"); } catch { toast("Copy didn't work on this device"); }
+}
+
+/* ---------- views ---------- */
+let TAB = "learn";
+const view = () => $("#view");
+function setColor(c) { document.body.dataset.c = c; }
+function topBar(left) {
+  const st = liveStreak();
+  return `<header class="top">${left}<div class="pills">
+    <span class="pill fire ${st ? "" : "off"}" title="Day streak">${I.flame}${st}</span>
+    <span class="pill xp" title="Total XP">${I.xp}${S.xp}</span></div></header>`;
+}
+function refresh() { if ($("#player")) return; render(); }
+function render() {
+  if (TAB !== "bible") $(".selbar")?.remove();
+  $$(".tabs button").forEach((b) => b.setAttribute("aria-selected", b.dataset.tab === TAB));
+  ({ learn: renderLearn, bible: renderBible, saved: renderSaved, me: renderMe })[TAB]();
+}
+function tab(t) { TAB = t; closeSheet(); render(); window.scrollTo(0, 0); }
+
+/* Learn */
+function renderLearn() {
+  const sec = SEC[S.section] || SECTIONS[0]; setColor(sec.color);
+  const v = VOTD_REFS[Math.floor(new Date(today()).getTime() / 864e5) % VOTD_REFS.length];
+  const g = Math.min(1, xpToday() / S.goal);
+  const cur = currentIndex(sec.id);
+  const offs = [0, 46, 72, 46, 0, -46, -72, -46];
+  let h = topBar(`<button class="secbtn" id="secbtn" aria-label="Change section, current: ${esc(sec.name)}"><i class="sw"></i><span>${esc(sec.name)}</span>${I.chev}</button>`);
+  h += `<section class="votd"><div class="votd-h"><span class="eyebrow">Verse of the day</span>
+    <button class="iconbtn heart ${isSaved(v) ? "on" : ""}" data-save="${esc(v)}" aria-label="${isSaved(v) ? "Remove from saved" : "Save verse"}">${isSaved(v) ? I.heart : I.heartO}</button></div>
+    <blockquote>${esc(passageText(v))}</blockquote><span class="ref">${esc(v)}</span>
+    <div class="goal"><span>${xpToday() >= S.goal ? "Daily goal met" : "Daily goal"}</span><span class="goalbar"><i style="width:${g * 100}%"></i></span><span>${xpToday()}/${S.goal} XP</span></div></section>`;
+  let gi = 0;
+  sec.units.forEach((u, ui) => {
+    const nodes = NODES[sec.id].map((n, i) => ({ ...n, i })).filter((n) => n.ui === ui);
+    h += `<section class="unit" id="unit-${ui}"><div class="banner"><span class="eyebrow">Unit ${ui + 1}</span><h2>${esc(u.t)}</h2><p>${esc(u.d)}</p></div><div class="path">`;
+    nodes.forEach((n, k) => {
+      const done = isDone(n.id), open = nodeOpen(sec.id, n.i), isCur = n.i === cur;
+      const label = n.kind === "review" ? `Unit ${ui + 1} review` : LESSON[n.id].l.t;
+      const icon = done ? (n.kind === "review" ? I.trophy : I.check) : !open ? (n.kind === "review" ? I.trophy : I.lock) : n.kind === "review" ? I.trophy : I.star;
+      h += `<div class="nodewrap ${isCur ? "cur" : ""}" style="transform:translateX(${offs[(k + gi) % offs.length]}px)">${isCur ? `<span class="bubble">${cur === 0 ? "Start" : "Next"}</span>` : ""}
+        <button class="node ${done ? "done" : open ? "" : "locked"} ${isCur ? "current" : ""} ${n.kind === "review" ? "review" : ""}" data-node="${n.i}" aria-label="${esc(label)}${done ? ", complete" : open ? "" : ", locked"}">${icon}</button></div>`;
+    });
+    gi += nodes.length;
+    h += `</div></section>`;
+  });
+  view().innerHTML = `<div class="wrap">${h}</div>`;
+  $("#secbtn").onclick = openSections;
+  if (cur >= 0 && !renderLearn.scrolled) { renderLearn.scrolled = true; const el = $(`[data-node="${cur}"]`); if (el && el.getBoundingClientRect().bottom > innerHeight - 110) setTimeout(() => el.scrollIntoView({ block: "center" }), 30); }
+}
+function openSections() {
+  sheet(`<h3>Choose a section</h3><p>Each section is its own path. Your progress is kept in all of them.</p><div class="seclist">${SECTIONS.map((s) => {
+    const [d, n] = secProgress(s.id);
+    return `<button class="secrow" data-c="${s.color}" data-sec="${s.id}" aria-current="${s.id === S.section}"><span class="sw">${SEC_ICON[s.id]}</span><b>${esc(s.name)}</b><small>${esc(s.desc)}</small><span class="bar"><i style="width:${(d / n) * 100}%"></i></span></button>`;
+  }).join("")}</div>`, (el) => el.querySelectorAll("[data-sec]").forEach((b) => (b.onclick = () => { S.section = b.dataset.sec; save(); closeSheet(); renderLearn.scrolled = false; renderLearn(); window.scrollTo(0, 0); })));
+}
+function openNode(i) {
+  const sec = SEC[S.section], n = NODES[sec.id][i], open = nodeOpen(sec.id, i), done = isDone(n.id);
+  const u = sec.units[n.ui];
+  if (n.kind === "review") {
+    sheet(`<span class="eyebrow">Unit ${n.ui + 1} · ${esc(u.t)}</span><h3>Unit review</h3><p>${open ? "Practice every verse from this unit. Earn a trophy." : "Finish every lesson in this unit to unlock the review."}</p>
+      ${open ? `<button class="btn wide" id="go">${done ? "Review again +5 XP" : "Start review +15 XP"}</button>` : ""}`, (el) => { const g = el.querySelector("#go"); if (g) g.onclick = () => { closeSheet(); startReview(sec, n.ui); }; }, sec.color);
+    return;
+  }
+  const L = LESSON[n.id], count = u.lessons.length;
+  sheet(`<span class="eyebrow">Unit ${n.ui + 1} · Lesson ${n.li + 1} of ${count}</span><h3>${esc(L.l.t)}</h3><p>${open ? esc(L.l.v.join(" · ")) : "Finish the lesson before this one to unlock it."}</p>
+    ${open ? `<button class="btn wide" id="go">${done ? "Practice again +5 XP" : "Start +10 XP"}</button>` : ""}`, (el) => { const g = el.querySelector("#go"); if (g) g.onclick = () => { closeSheet(); startLesson(n.id); }; }, sec.color);
+}
+
+/* Bible reader */
+const BIBLE = {};
+async function loadBook(b) {
+  if (BIBLE[b]) return BIBLE[b];
+  const r = await fetch(`bible/${b}.json`);
+  if (!r.ok) throw new Error("load");
+  return (BIBLE[b] = await r.json());
+}
+let SEL = new Set();
+function savedVersesIn(b, c) {
+  const set = new Set();
+  for (const ref in S.saved) { const p = parseRef(ref); if (p && p.b === b && p.c === c) for (let v = p.v1; v <= p.v2; v++) set.add(v); }
+  return set;
+}
+async function renderBible(scrollTo) {
+  setColor((SEC[S.section] || SECTIONS[0]).color);
+  const { b, c } = S.reader;
+  view().innerHTML = `<div class="wrap">${topBar(`<span class="title-bar">Bible</span>`)}
+    <div class="readbar"><button class="pick" id="pick">${esc(BOOKS[b].name)} ${c}${I.chev}</button><span class="eyebrow">BSB</span></div>
+    <div id="chap"><div class="loading"><div class="spin" aria-label="Loading"></div></div></div></div>`;
+  $("#pick").onclick = () => openPicker(b < 39 ? "ot" : "nt");
+  let book;
+  try { book = await loadBook(b); } catch { $("#chap").innerHTML = `<div class="empty"><h3>Couldn't open this chapter</h3><p>Check your connection and try again. Chapters you've opened before work offline.</p><button class="btn" id="retry">Try again</button></div>`; $("#retry").onclick = () => renderBible(); return; }
+  if (TAB !== "bible" || S.reader.b !== b || S.reader.c !== c) return;
+  const vs = book.chapters[c - 1], saved = savedVersesIn(b, c);
+  $("#chap").innerHTML = `<div class="chapter">${vs.map((t, i) => `<span class="v ${saved.has(i + 1) ? "saved" : ""} ${SEL.has(i + 1) ? "sel" : ""}" id="v-${i + 1}" data-v="${i + 1}" tabindex="0" role="button" aria-pressed="${SEL.has(i + 1)}"><sup>${i + 1}</sup>${esc(t)}</span> `).join("")}</div>
+    <div class="chnav"><button class="btn ghost small" id="prevc" ${b === 0 && c === 1 ? "disabled" : ""}>${I.arrowL}Previous</button><button class="btn ghost small" id="nextc" ${b === 65 && c === BOOKS[65].ch ? "disabled" : ""}>Next${I.arrowR}</button></div>`;
+  $$(".chapter .v").forEach((el) => { const tog = () => { const n = +el.dataset.v; SEL.has(n) ? SEL.delete(n) : SEL.add(n); el.classList.toggle("sel"); el.setAttribute("aria-pressed", SEL.has(n)); selBar(); }; el.onclick = tog; el.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); tog(); } }; });
+  $("#prevc").onclick = () => goChapter(-1); $("#nextc").onclick = () => goChapter(1);
+  if (scrollTo) { const el = $("#v-" + scrollTo); if (el) { el.scrollIntoView({ block: "center" }); el.classList.add("sel"); SEL.add(scrollTo); selBar(); } }
+  selBar();
+}
+function goChapter(d) {
+  let { b, c } = S.reader; c += d;
+  if (c < 1) { b--; c = BOOKS[b].ch; } else if (c > BOOKS[b].ch) { b++; c = 1; }
+  S.reader = { b, c }; SEL = new Set(); save(); renderBible(); window.scrollTo(0, 0);
+}
+function selRuns() {
+  const ns = [...SEL].sort((a, b) => a - b), runs = [];
+  for (const n of ns) { const r = runs[runs.length - 1]; if (r && r[1] === n - 1) r[1] = n; else runs.push([n, n]); }
+  const { b, c } = S.reader, book = BIBLE[b];
+  return runs.map(([a, z]) => ({ ref: `${refBook(b)} ${c}:${a}${z > a ? "-" + z : ""}`, text: book.chapters[c - 1].slice(a - 1, z).join(" ") }));
+}
+function selBar() {
+  $(".selbar")?.remove();
+  if (TAB !== "bible" || !SEL.size || !BIBLE[S.reader.b]) return;
+  const runs = selRuns(), allSaved = runs.every((r) => isSaved(r.ref));
+  const d = document.createElement("div"); d.className = "selbar";
+  d.innerHTML = `<div class="in"><b>${esc(runs.map((r) => r.ref).join(", "))}</b><button class="save" id="ssave">${allSaved ? I.heart + "Saved" : I.heartO + "Save"}</button><button id="scopy" aria-label="Copy">${I.copy}</button><button id="sx" aria-label="Clear selection">${I.x}</button></div>`;
+  document.body.append(d);
+  $("#ssave").onclick = () => { for (const r of runs) if (allSaved ? isSaved(r.ref) : !isSaved(r.ref)) toggleSave(r.ref, r.text); SEL = new Set(); renderBible(); };
+  $("#scopy").onclick = () => copyVerse(runs.map((r) => r.ref).join(", "), runs.map((r) => r.text).join(" "));
+  $("#sx").onclick = () => { SEL = new Set(); renderBible(); };
+}
+function openPicker(testament, chosen) {
+  if (chosen != null) {
+    sheet(`<h3>${esc(BOOKS[chosen].name)}</h3><p>Choose a chapter</p><div class="chgrid">${Array.from({ length: BOOKS[chosen].ch }, (_, i) => `<button data-ch="${i + 1}" aria-current="${S.reader.b === chosen && S.reader.c === i + 1}">${i + 1}</button>`).join("")}</div>`,
+      (el) => el.querySelectorAll("[data-ch]").forEach((x) => (x.onclick = () => { S.reader = { b: chosen, c: +x.dataset.ch }; SEL = new Set(); save(); closeSheet(); renderBible(); window.scrollTo(0, 0); })));
+    return;
+  }
+  const list = BOOKS.map((bk, i) => ({ bk, i })).filter((x) => (testament === "ot" ? x.i < 39 : x.i >= 39));
+  sheet(`<h3>Choose a book</h3><div class="booktabs"><button data-t="ot" aria-pressed="${testament === "ot"}">Old Testament</button><button data-t="nt" aria-pressed="${testament === "nt"}">New Testament</button></div>
+    <div class="bookgrid">${list.map(({ bk, i }) => `<button data-b="${i}" aria-current="${S.reader.b === i}">${esc(bk.name)}</button>`).join("")}</div>`,
+    (el) => { el.querySelectorAll("[data-t]").forEach((x) => (x.onclick = () => openPicker(x.dataset.t))); el.querySelectorAll("[data-b]").forEach((x) => (x.onclick = () => { const i = +x.dataset.b; BOOKS[i].ch === 1 ? (S.reader = { b: i, c: 1 }, SEL = new Set(), save(), closeSheet(), renderBible()) : openPicker(null, i); })); });
+}
+
+/* Saved */
+let savedQ = "";
+function renderSaved() {
+  setColor((SEC[S.section] || SECTIONS[0]).color);
+  const all = Object.entries(S.saved).sort((a, b) => b[1].at.localeCompare(a[1].at));
+  const q = savedQ.trim().toLowerCase();
+  const list = q ? all.filter(([r, s]) => (r + " " + s.t + " " + (s.note || "")).toLowerCase().includes(q)) : all;
+  let h = topBar(`<span class="title-bar">Saved</span>`);
+  if (!all.length) {
+    h += `<div class="empty"><span class="big">${I.heart}</span><h3>Keep the verses that speak to you</h3><p>Tap the heart on any verse in a lesson, or select verses while reading the Bible. They'll live here so you can come back, add notes, and memorize them.</p><button class="btn" id="toBible">Open the Bible</button></div>`;
+  } else {
+    h += `<h1 class="page-h">My verses</h1><p class="page-sub">${all.length} saved${all.length > 1 ? " · practice them to memorize" : ""}</p>
+      <button class="btn wide" id="practice">${I.bulb}Practice saved verses</button>
+      <div style="margin-top:14px"><input class="search" id="sq" type="search" placeholder="Search your verses and notes" value="${esc(savedQ)}" aria-label="Search saved verses"></div>
+      <div class="savedlist">${list.map(([ref, s]) => `<article class="scard" data-ref="${esc(ref)}">
+        <div class="row"><button class="ref" data-open="${esc(ref)}">${esc(ref)}</button><span class="when">${new Date(s.at).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}</span></div>
+        <blockquote>${esc(s.t)}</blockquote>
+        <textarea class="note" data-note="${esc(ref)}" rows="1" placeholder="Why does this verse matter to you?" aria-label="Note for ${esc(ref)}">${esc(s.note || "")}</textarea>
+        <div class="row"><span></span><span class="acts"><button class="iconbtn" data-copy="${esc(ref)}" aria-label="Copy ${esc(ref)}">${I.copy}</button><button class="iconbtn heart on" data-unsave="${esc(ref)}" aria-label="Remove ${esc(ref)}">${I.heart}</button></span></div></article>`).join("")}
+      ${q && !list.length ? `<p class="page-sub">No saved verses match "${esc(savedQ)}".</p>` : ""}</div>`;
+  }
+  view().innerHTML = `<div class="wrap">${h}</div>`;
+  $("#toBible")?.addEventListener("click", () => tab("bible"));
+  $("#practice")?.addEventListener("click", startPractice);
+  const sq = $("#sq"); if (sq) sq.oninput = () => { savedQ = sq.value; const p = sq.selectionStart; renderSaved(); const n = $("#sq"); n.focus(); n.setSelectionRange(p, p); };
+  $$("[data-note]").forEach((t) => { const fit = () => { t.style.height = "auto"; t.style.height = t.scrollHeight + 4 + "px"; }; fit(); t.oninput = () => { fit(); if (S.saved[t.dataset.note]) { S.saved[t.dataset.note].note = t.value; save(); } }; });
+  $$("[data-copy]").forEach((b) => (b.onclick = () => copyVerse(b.dataset.copy, S.saved[b.dataset.copy].t)));
+  $$("[data-unsave]").forEach((b) => (b.onclick = () => { toggleSave(b.dataset.unsave); renderSaved(); }));
+  $$("[data-open]").forEach((b) => (b.onclick = () => { const p = parseRef(b.dataset.open); if (!p) return; S.reader = { b: p.b, c: p.c }; SEL = new Set(); save(); TAB = "bible"; $$(".tabs button").forEach((x) => x.setAttribute("aria-selected", x.dataset.tab === TAB)); renderBible(p.v1); }));
+}
+
+/* Profile */
+function renderMe() {
+  setColor((SEC[S.section] || SECTIONS[0]).color);
+  const lessons = Object.keys(S.done).filter((k) => !k.startsWith("R:")).length;
+  const days = Array.from({ length: 7 }, (_, i) => { const d = new Date(); d.setDate(d.getDate() - (6 - i)); return localDay(d); });
+  const max = Math.max(S.goal, ...days.map((d) => S.days[d] || 0));
+  let h = topBar(`<span class="title-bar">Profile</span>`);
+  h += `<div class="stats" style="margin-top:16px">
+    <div class="stat" style="color:#E8790F">${I.flame}<div><b style="color:var(--ink)">${liveStreak()}</b><small>Day streak</small></div></div>
+    <div class="stat" style="color:var(--gold-d)">${I.xp}<div><b style="color:var(--ink)">${S.xp}</b><small>Total XP</small></div></div>
+    <div class="stat" style="color:var(--c)">${I.check}<div><b style="color:var(--ink)">${lessons}</b><small>Lessons done</small></div></div>
+    <div class="stat" style="color:#E5484D">${I.heart}<div><b style="color:var(--ink)">${Object.keys(S.saved).length}</b><small>Verses saved</small></div></div></div>
+  <section class="block"><h3>This week</h3><div class="week" role="img" aria-label="XP earned each of the last 7 days">${days.map((d) => { const x = S.days[d] || 0; return `<div class="col ${x ? "" : "zero"}"><em>${x || ""}</em><i style="height:${Math.max(4, (x / max) * 100)}px"></i><small>${new Date(d + "T12:00").toLocaleDateString(undefined, { weekday: "narrow" })}</small></div>`; }).join("")}</div>
+    <p class="page-sub" style="margin-top:8px">Best streak: ${Math.max(S.best, liveStreak())} day${Math.max(S.best, liveStreak()) === 1 ? "" : "s"}</p></section>
+  <section class="block"><h3>Daily goal</h3><div class="segs">${[[10, "Casual"], [20, "Regular"], [30, "Serious"], [50, "Intense"]].map(([n, l]) => `<button data-goal="${n}" aria-pressed="${S.goal === n}">${l} · ${n} XP</button>`).join("")}</div></section>
+  <section class="block"><h3>Sections</h3>${SECTIONS.map((s) => { const [d, n] = secProgress(s.id); return `<div class="prow" data-c="${s.color}"><i class="sw"></i><b>${esc(s.name)}</b><span>${d}/${n}</span><span class="bar"><i style="width:${(d / n) * 100}%"></i></span></div>`; }).join("")}</section>
+  <section class="block"><h3>Sound effects</h3><div class="segs"><button data-sound="1" aria-pressed="${S.sound}">On</button><button data-sound="0" aria-pressed="${!S.sound}">Off</button></div></section>
+  <button class="linkbtn" id="reset">Reset all progress</button>
+  <p class="fine">Scripture quotations are from the Berean Standard Bible (BSB), which is in the public domain. Your progress and saved verses are stored on this device.</p>`;
+  view().innerHTML = `<div class="wrap">${h}</div>`;
+  $$("[data-goal]").forEach((b) => (b.onclick = () => { S.goal = +b.dataset.goal; save(); renderMe(); }));
+  $$("[data-sound]").forEach((b) => (b.onclick = () => { S.sound = b.dataset.sound === "1"; save(); renderMe(); if (S.sound) beep(true); }));
+  let armed = false;
+  $("#reset").onclick = (e) => { if (!armed) { armed = true; e.target.textContent = "Tap again to erase progress (saved verses are kept)"; return; } const keep = S.saved; S = fresh(); S.saved = keep; save(); toast("Progress reset"); renderMe(); };
+}
+
+/* ---------- exercise builders ---------- */
+function blankStep(ref) {
+  const words = passageText(ref).split(/\s+/);
+  const cand = words.map((w, i) => ({ i, c: core(w) })).filter((x) => x.c.length >= 4 && !STOP.has(x.c.toLowerCase()) && x.c !== x.c.toUpperCase());
+  if (!cand.length) return null;
+  cand.sort((a, b) => b.c.length - a.c.length);
+  const pick = cand[rand(Math.min(5, cand.length))];
+  const ans = pick.c, lower = ans.toLowerCase(), cap = ans[0] !== ans[0].toLowerCase();
+  const inVerse = new Set(words.map((w) => core(w).toLowerCase()));
+  let pool = POOL.filter((w) => w !== lower && !inVerse.has(w) && Math.abs(w.length - ans.length) <= 3);
+  const opts = pickN(pool, 3).map((w) => (cap ? w[0].toUpperCase() + w.slice(1) : w));
+  const all = shuffle([ans, ...opts]);
+  return { type: "blank", ref, idx: pick.i, options: all, ans: all.indexOf(ans) };
+}
+function whereStep(ref, pool) {
+  const p = parseRef(ref);
+  const others = (pool || ALL_REFS).filter((r) => { const q = parseRef(r); return r !== ref && q && !(q.b === p?.b && q.c === p?.c); });
+  const opts = shuffle([ref, ...pickN(others.length >= 3 ? others : ALL_REFS.filter((r) => r !== ref), 3)]);
+  return { type: "where", ref, options: opts, ans: opts.indexOf(ref) };
+}
+function buildStep(ref) {
+  const words = passageText(ref).split(/\s+/).filter(Boolean);
+  let start = 0, end = words.length;
+  if (words.length > 9) { const len = 6 + rand(3); start = rand(words.length - len + 1); end = start + len; }
+  const chunk = words.slice(start, end).map(core).filter(Boolean);
+  const inVerse = new Set(words.map((w) => core(w).toLowerCase()));
+  const extra = pickN(POOL.filter((w) => !inVerse.has(w)), 2);
+  return { type: "build", ref, start, end, chunk, bank: shuffle([...chunk, ...extra]) };
+}
+function mcStep(q) {
+  const [question, ...opts] = q, correct = opts[0], all = shuffle(opts);
+  return { type: "mc", q: question, options: all, ans: all.indexOf(correct) };
+}
+
+function lessonSteps(L, sec) {
+  const refs = L.v, pool = sec.units.flatMap((u) => u.lessons.flatMap((x) => x.v));
+  const s = [{ type: "teach", title: L.t, paras: L.teach }];
+  for (const r of refs) s.push({ type: "read", ref: r });
+  const shortest = refs.slice().sort((a, b) => passageText(a).length - passageText(b).length)[0];
+  const add = (x) => x && s.push(x);
+  add(blankStep(refs[0]));
+  if (L.q[0]) add(mcStep(L.q[0]));
+  add(whereStep(refs[1] || refs[0], pool));
+  add(buildStep(shortest));
+  if (L.q[1]) add(mcStep(L.q[1]));
+  if (refs[1]) add(blankStep(refs[1]));
+  for (const q of L.q.slice(2)) add(mcStep(q));
+  return s;
+}
+
+/* ---------- player ---------- */
+let P = null;
+function openPlayer(meta, steps) {
+  steps.forEach((x, i) => (x.uid = i));
+  P = { meta, steps, pos: 0, sel: null, checked: false, graded: 0, firstRight: 0, retried: new Set(), built: [] };
+  const el = document.createElement("div"); el.className = "player"; el.id = "player"; el.dataset.c = meta.color;
+  el.innerHTML = `<div class="p-top"><button class="iconbtn" id="pquit" aria-label="Quit">${I.x}</button><div class="prog" role="progressbar" aria-label="Lesson progress"><i id="pbar" style="width:0"></i></div></div>
+    <div class="p-body" id="pbody"><div class="p-inner" id="pin"></div></div>
+    <div class="p-foot" id="pfoot"><div class="p-inner"><div class="fb" id="fb" hidden></div><button class="btn wide go" id="pgo">Continue</button></div></div>`;
+  document.body.append(el); document.body.style.overflow = "hidden"; $(".selbar")?.remove();
+  $("#pquit").onclick = askQuit;
+  draw();
+}
+function askQuit() {
+  if (!P || P.pos === 0 || P.finished) return closePlayer();
+  sheet(`<h3>Leave this lesson?</h3><p>You'll lose your progress in this lesson.</p><div style="display:grid;gap:10px"><button class="btn wide" id="stay">Keep learning</button><button class="btn ghost wide" id="leave">End lesson</button></div>`,
+    (el) => { el.querySelector("#stay").onclick = closeSheet; el.querySelector("#leave").onclick = () => { closeSheet(); closePlayer(); }; }, P.meta.color);
+}
+function closePlayer() { $("#player")?.remove(); document.body.style.overflow = ""; P = null; render(); }
+const verseHTML = (ref, blankIdx) => {
+  const v = VERSES[ref];
+  if (blankIdx != null) {
+    const words = passageText(ref).split(/\s+/);
+    return words.map((w, i) => { if (i !== blankIdx) return esc(w); const c = core(w), k = w.indexOf(c); return esc(w.slice(0, k)) + `<span class="blank" id="blank">?</span>` + esc(w.slice(k + c.length)); }).join(" ");
+  }
+  if (v && v.v.length > 1) return v.v.map(([n, t]) => `<sup>${n}</sup>${esc(t)}`).join(" ");
+  return esc(passageText(ref));
+};
+function saveBtn(ref) { const on = isSaved(ref); return `<button class="savebtn ${on ? "on" : ""}" data-psave="${esc(ref)}" aria-pressed="${on}">${on ? I.heart : I.heartO}${on ? "Saved" : "Save"}</button>`; }
+function wireSave(root) { root.querySelectorAll("[data-psave]").forEach((b) => (b.onclick = () => { const on = toggleSave(b.dataset.psave); b.classList.toggle("on", on); b.setAttribute("aria-pressed", on); b.innerHTML = (on ? I.heart : I.heartO) + (on ? "Saved" : "Save"); })); }
+
+function draw() {
+  const st = P.steps[P.pos], pin = $("#pin"), go = $("#pgo"), foot = $("#pfoot");
+  foot.className = "p-foot"; $("#fb").hidden = true; P.sel = null; P.checked = false; P.built = [];
+  $("#pbar").style.width = (P.pos / P.steps.length) * 100 + "%";
+  const label = (icon, t) => `<div class="kind">${icon}${t}</div>`;
+  if (st.type === "teach") {
+    pin.innerHTML = `${label(SEC_ICON[P.meta.sec] || I.book, P.meta.kicker)}<h1 class="q">${esc(st.title)}</h1><div class="teach">${st.paras.map((p) => `<p>${esc(p)}</p>`).join("")}</div>`;
+    go.disabled = false; go.textContent = "Continue"; go.onclick = next;
+  } else if (st.type === "read") {
+    pin.innerHTML = `${label(I.book, st.retry ? "Read it again" : "New verse")}<div class="vcard" style="margin-top:14px"><p class="verse">${verseHTML(st.ref)}</p><div class="vfoot"><span class="ref">${esc(st.ref)}</span>${saveBtn(st.ref)}</div></div>`;
+    wireSave(pin); go.disabled = false; go.textContent = "Continue"; go.onclick = next;
+  } else if (st.type === "mc" || st.type === "blank" || st.type === "where") {
+    let head;
+    if (st.type === "mc") head = `${label(I.q, st.retry ? "Try again" : "Question")}<h1 class="q">${esc(st.q)}</h1>`;
+    else if (st.type === "blank") head = `${label(I.bulb, st.retry ? "Try again" : "Fill in the blank")}<div class="vcard" style="margin:14px 0 20px"><p class="verse">${verseHTML(st.ref, st.idx)}</p><span class="ref">${esc(st.ref)}</span></div>`;
+    else head = `${label(I.book, st.retry ? "Try again" : "Where is this verse?")}<div class="vcard" style="margin:14px 0 20px"><p class="verse">${verseHTML(st.ref)}</p></div>`;
+    pin.innerHTML = `${head}<div class="opts ${st.type === "blank" ? "two" : ""}">${st.options.map((o, j) => `<button class="opt" data-j="${j}" aria-pressed="false"><span class="n">${j + 1}</span>${esc(o)}</button>`).join("")}</div>`;
+    pin.querySelectorAll(".opt").forEach((b) => (b.onclick = () => pick(+b.dataset.j)));
+    go.disabled = true; go.textContent = "Check"; go.onclick = () => (P.checked ? next() : check());
+  } else if (st.type === "build") {
+    const words = passageText(st.ref).split(/\s+/).filter(Boolean);
+    const pre = words.slice(Math.max(0, st.start - 10), st.start).join(" "), post = words.slice(st.end, st.end + 6).join(" ");
+    pin.innerHTML = `${label(I.bulb, st.retry ? "Try again" : "Put the words in order")}
+      <p class="ctx" style="margin-top:14px">${st.start > 10 ? "… " : ""}${esc(pre)}${pre ? " " : ""}<b style="color:var(--c)">_____</b>${post ? " " + esc(post) : ""}${st.end + 6 < words.length ? " …" : ""}</p>
+      <div class="answer" id="ans" aria-label="Your answer"></div><div class="bank" id="bank">${st.bank.map((w, j) => `<button class="chip" data-k="${j}">${esc(w)}</button>`).join("")}</div><p class="ref" style="margin-top:16px;text-align:center">${esc(st.ref)}</p>`;
+    pin.querySelectorAll("#bank .chip").forEach((b) => (b.onclick = () => { if (P.checked || b.classList.contains("used")) return; P.built.push(+b.dataset.k); b.classList.add("used"); drawAnswer(); }));
+    drawAnswer(); go.textContent = "Check"; go.onclick = () => (P.checked ? next() : check());
+  }
+  $("#pbody").scrollTop = 0;
+}
+function drawAnswer() {
+  const st = P.steps[P.pos], ans = $("#ans");
+  ans.innerHTML = P.built.map((k, i) => `<button class="chip" data-i="${i}">${esc(st.bank[k])}</button>`).join("");
+  ans.querySelectorAll(".chip").forEach((b) => (b.onclick = () => { if (P.checked) return; const k = P.built.splice(+b.dataset.i, 1)[0]; $(`#bank [data-k="${k}"]`).classList.remove("used"); drawAnswer(); }));
+  $("#pgo").disabled = P.built.length === 0;
+}
+function pick(j) {
+  if (!P || P.checked) return; const st = P.steps[P.pos]; if (!["mc", "blank", "where"].includes(st.type)) return;
+  const os = $$("#pin .opt"); if (!os[j]) return;
+  os.forEach((x) => x.setAttribute("aria-pressed", "false")); os[j].setAttribute("aria-pressed", "true");
+  P.sel = j; $("#pgo").disabled = false;
+  if (st.type === "blank") { const b = $("#blank"); if (b) b.textContent = st.options[j]; }
+}
+function check() {
+  const st = P.steps[P.pos]; P.checked = true;
+  let ok, right;
+  if (st.type === "build") { ok = P.built.map((k) => st.bank[k]).join(" ") === st.chunk.join(" "); right = st.chunk.join(" "); $$("#bank .chip").forEach((b) => (b.disabled = true)); }
+  else { ok = P.sel === st.ans; right = st.options[st.ans]; $$("#pin .opt").forEach((b, j) => { b.disabled = true; if (j === st.ans) b.classList.add("right"); else if (j === P.sel) b.classList.add("wrong"); }); if (st.type === "blank") $("#blank").textContent = right; }
+  if (!st.retry) { P.graded++; if (ok) P.firstRight++; }
+  if (!ok && !P.retried.has(st.uid)) { P.retried.add(st.uid); P.steps.push({ ...st, retry: true, ...(st.type === "build" ? { bank: shuffle(st.bank) } : st.options ? reshuffle(st) : {}) }); }
+  beep(ok);
+  const praise = ["Excellent!", "Nice job!", "Correct!", "Well done!", "Amen!", "Great!"][rand(6)];
+  $("#pfoot").className = "p-foot " + (ok ? "good" : "bad");
+  const fb = $("#fb"); fb.hidden = false;
+  fb.innerHTML = `<span class="badge">${ok ? I.check : I.x}</span><div><strong>${ok ? praise : "Correct answer:"}</strong>${ok ? (st.ref && st.type !== "where" ? `<span>${esc(st.ref)}</span>` : "") : `<span>${esc(right)}</span>`}</div>`;
+  const go = $("#pgo"); go.disabled = false; go.textContent = "Continue";
+}
+function reshuffle(st) { const right = st.options[st.ans], o = shuffle(st.options); return { options: o, ans: o.indexOf(right) }; }
+function next() { P.pos++; if (P.pos >= P.steps.length) finish(); else draw(); }
+
+function finish() {
+  const m = P.meta, first = !isDone(m.id), perfect = P.graded > 0 && P.firstRight === P.graded;
+  const gain = m.kind === "practice" ? 10 : first ? m.xp + (m.kind === "lesson" && perfect ? 5 : 0) : 5;
+  const before = xpToday();
+  S.xp += gain; S.days[today()] = before + gain;
+  if (m.id) S.done[m.id] = true;
+  const t = today();
+  if (S.last !== t) { S.streak = S.last && dayDiff(S.last, t) === 1 ? S.streak + 1 : 1; S.last = t; }
+  S.best = Math.max(S.best, S.streak);
+  save(); P.finished = true;
+  const acc = P.graded ? Math.round((P.firstRight / P.graded) * 100) : 100;
+  const goalHit = before < S.goal && S.days[t] >= S.goal;
+  $("#pbar").style.width = "100%";
+  $("#pin").innerHTML = `<div class="done-screen"><div class="medal">${m.kind === "review" ? I.trophy : I.star}</div>
+    <h2>${m.kind === "review" ? "Unit complete!" : m.kind === "practice" ? "Practice complete!" : "Lesson complete!"}</h2>
+    <p class="page-sub" style="margin:0">${goalHit ? "You hit your daily goal. Keep showing up." : perfect ? "Perfect, no mistakes." : "Every verse you learn stays with you."}</p>
+    <div class="tiles"><div class="tile" style="--tc:var(--gold-d)"><small>XP</small><b>+${gain}</b></div><div class="tile" style="--tc:var(--good)"><small>Accuracy</small><b>${acc}%</b></div><div class="tile" style="--tc:#E8790F"><small>Streak</small><b>${S.streak}</b></div></div>
+    ${m.refs && m.refs.length ? `<div class="keep"><h4>Did a verse speak to you? Save it.</h4>${m.refs.map((r) => `<div class="krow"><div><p>${esc(passageText(r))}</p><span class="ref">${esc(r)}</span></div>${saveBtn(r)}</div>`).join("")}</div>` : ""}</div>`;
+  wireSave($("#pin"));
+  $("#pfoot").className = "p-foot"; $("#fb").hidden = true;
+  const go = $("#pgo"); go.disabled = false; go.textContent = "Continue"; go.onclick = () => { renderLearn.scrolled = false; closePlayer(); };
+  $("#pbody").scrollTop = 0;
+}
+
+function startLesson(id) {
+  const { sec, ui, li, l } = LESSON[id];
+  openPlayer({ kind: "lesson", id, sec: sec.id, color: sec.color, xp: 10, refs: l.v, kicker: `${sec.name} · Unit ${ui + 1} · Lesson ${li + 1}` }, lessonSteps(l, sec));
+}
+function startReview(sec, ui) {
+  const u = sec.units[ui], refs = [...new Set(u.lessons.flatMap((l) => l.v))], pool = sec.units.flatMap((x) => x.lessons.flatMap((l) => l.v));
+  let steps = refs.map((r, i) => (i % 2 ? whereStep(r, pool) : blankStep(r))).filter(Boolean);
+  steps.push(...pickN(refs, 2).map(buildStep));
+  steps.push(...pickN(u.lessons.flatMap((l) => l.q), 3).map(mcStep));
+  steps = shuffle(steps).slice(0, 12);
+  openPlayer({ kind: "review", id: `R:${sec.id}-${ui}`, sec: sec.id, color: sec.color, xp: 15, refs: [], kicker: "Unit review" }, steps);
+}
+function startPractice() {
+  const refs = pickN(Object.keys(S.saved), 6);
+  let steps = [];
+  for (const r of refs) { steps.push(blankStep(r)); }
+  steps.push(...pickN(refs, Math.min(3, refs.length)).map(buildStep));
+  if (refs.length >= 2) steps.push(...pickN(refs, 2).map((r) => whereStep(r, [...ALL_REFS, ...Object.keys(S.saved)])));
+  steps = shuffle(steps.filter(Boolean));
+  if (!steps.length) { toast("Save a few more verses to practice"); return; }
+  openPlayer({ kind: "practice", id: null, sec: "saved", color: (SEC[S.section] || SECTIONS[0]).color, xp: 10, refs: [], kicker: "Practice" }, steps);
+}
+
+/* ---------- global wiring ---------- */
+document.addEventListener("click", (e) => {
+  const sv = e.target.closest("[data-save]");
+  if (sv && !$("#player")) { const on = toggleSave(sv.dataset.save); sv.classList.toggle("on", on); sv.innerHTML = on ? I.heart : I.heartO; sv.setAttribute("aria-label", on ? "Remove from saved" : "Save verse"); return; }
+  const nd = e.target.closest("[data-node]");
+  if (nd && !$("#player")) openNode(+nd.dataset.node);
+});
+$$(".tabs button").forEach((b) => (b.onclick = () => tab(b.dataset.tab)));
+document.addEventListener("keydown", (e) => {
+  if ($("#scrim") && e.key === "Escape") return closeSheet();
+  if (!P || $("#scrim")) return;
+  if (e.key === "Escape") return askQuit();
+  if (/^[1-6]$/.test(e.key)) pick(+e.key - 1);
+  else if (e.key === "Enter" && !$("#pgo").disabled && !(document.activeElement && document.activeElement.closest(".opt,.chip,.savebtn"))) { e.preventDefault(); $("#pgo").click(); }
 });
 
-header();render();pull();
-if("serviceWorker" in navigator)window.addEventListener("load",()=>navigator.serviceWorker.register("/sw.js").catch(()=>{}));
+$(".tabs").innerHTML = [["learn", "Learn", I.learn], ["bible", "Bible", I.book], ["saved", "Saved", I.heart], ["me", "Profile", I.user]].map(([k, l, ic]) => `<button role="tab" data-tab="${k}" aria-selected="${k === TAB}">${ic}${l}</button>`).join("");
+$$(".tabs button").forEach((b) => (b.onclick = () => tab(b.dataset.tab)));
+render();
+
+if ("serviceWorker" in navigator && location.protocol === "https:" && !/claude|anthropic/.test(location.hostname)) {
+  window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
+}
