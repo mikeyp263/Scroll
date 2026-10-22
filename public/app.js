@@ -1,4 +1,5 @@
 import { SECTIONS, VERSES, BOOKS } from "./content.js";
+import { GLASS, medallion, unitWindow, roseWindow } from "./glass.js";
 
 /* ---------- helpers ---------- */
 const $ = (s, r = document) => r.querySelector(s);
@@ -40,6 +41,9 @@ const I = {
   q: '<svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm1 17h-2v-2h2zm2-7.7-.9.9c-.7.8-1.1 1.3-1.1 2.8h-2v-.5c0-1.1.4-2.1 1.2-2.8l1.2-1.3c.4-.4.6-.9.6-1.4a2 2 0 0 0-4 0H8a4 4 0 0 1 8 0c0 .9-.4 1.7-1 2.3z"/></svg>',
 };
 const SEC_ICON = { journey: I.compass, ot: I.tablets, nt: I.letter, gospels: I.cross, stories: I.spark };
+const D = (svg) => /\sd="([^"]+)"/.exec(svg)[1]; // raw path data for drawing inside glass
+const SEC_D = { journey: D(I.compass), ot: D(I.tablets), nt: D(I.letter), gospels: D(I.cross), stories: D(I.spark) };
+const play = '<svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>';
 
 /* ---------- content indexes ---------- */
 const SEC = Object.fromEntries(SECTIONS.map((s) => [s.id, s]));
@@ -82,7 +86,7 @@ const VOTD_REFS = ALL_REFS.filter((r) => VERSES[r].v.length === 1 && passageText
 
 /* ---------- state ---------- */
 const KEY = "scroll-v2";
-const fresh = () => ({ done: {}, xp: 0, days: {}, streak: 0, best: 0, last: null, goal: 20, section: "journey", saved: {}, reader: { b: 42, c: 1 }, sound: true });
+const fresh = () => ({ done: {}, xp: 0, days: {}, streak: 0, best: 0, last: null, goal: 20, section: "journey", saved: {}, reader: { b: 42, c: 1 }, sound: true, lastLit: null });
 let S = fresh();
 try { const raw = lsGet(KEY); if (raw) S = Object.assign(fresh(), JSON.parse(raw)); } catch {}
 const save = () => lsSet(KEY, S);
@@ -165,52 +169,72 @@ function render() {
 function tab(t) { TAB = t; closeSheet(); render(); window.scrollTo(0, 0); }
 
 /* Learn */
+function roseFor(sec, newest) {
+  const units = sec.units.map((u, ui) => ({ lessons: u.lessons.map((l) => isDone(l.id)), done: isDone(`R:${sec.id}-${ui}`) }));
+  return roseWindow(GLASS[sec.color], units, SEC_D[sec.id], newest);
+}
+function gemFor(sec) { return medallion(GLASS[sec.color], "current", SEC_D[sec.id], 3); }
+function goalRing() {
+  const g = Math.min(1, xpToday() / S.goal), C = 2 * Math.PI * 17;
+  return `<svg class="ring" viewBox="0 0 42 42" aria-hidden="true"><circle cx="21" cy="21" r="17" fill="none" style="stroke:var(--raised)" stroke-width="5"/><circle cx="21" cy="21" r="17" fill="none" style="stroke:var(--gilt)" stroke-width="5" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${C * (1 - g)}" transform="rotate(-90 21 21)"/></svg>`;
+}
 function renderLearn() {
   const sec = SEC[S.section] || SECTIONS[0]; setColor(sec.color);
   const v = VOTD_REFS[Math.floor(new Date(today()).getTime() / 864e5) % VOTD_REFS.length];
-  const g = Math.min(1, xpToday() / S.goal);
   const cur = currentIndex(sec.id);
-  const offs = [0, 46, 72, 46, 0, -46, -72, -46];
-  let h = topBar(`<button class="secbtn" id="secbtn" aria-label="Change section, current: ${esc(sec.name)}"><i class="sw"></i><span>${esc(sec.name)}</span>${I.chev}</button>`);
-  h += `<section class="votd"><div class="votd-h"><span class="eyebrow">Verse of the day</span>
+  const [dn, tot] = secProgress(sec.id);
+  const newest = S.lastLit && S.lastLit.sec === sec.id ? S.lastLit.key : null;
+  if (S.lastLit) { S.lastLit = null; save(); }
+  const offs = [0, 54, 84, 54, 0, -54, -84, -54];
+  const curNode = cur >= 0 ? NODES[sec.id][cur] : null;
+  const curTitle = curNode ? (curNode.kind === "review" ? `Unit ${curNode.ui + 1} review` : LESSON[curNode.id].l.t) : "Every pane is lit";
+  let h = topBar(`<button class="secbtn" id="secbtn" aria-label="Change section, current: ${esc(sec.name)}"><span class="gem">${gemFor(sec)}</span><span>${esc(sec.name)}</span>${I.chev}</button>`);
+  h += `<section class="hero">${roseFor(sec, newest)}
+    <h1>${esc(sec.name)}</h1><p class="sub">${dn} of ${tot} panes lit</p>
+    ${curNode ? `<button class="cta" data-node="${cur}"><div><small>${dn ? "Continue" : "Begin"} · Unit ${curNode.ui + 1}</small><b>${esc(curTitle)}</b></div><span class="go">${play}</span></button>` : `<p class="sub">You finished this section. Try another one.</p>`}</section>
+    <div class="card goal">${goalRing()}<div><b>${xpToday() >= S.goal ? "Daily goal complete" : "Daily goal"}</b><small>${xpToday()} of ${S.goal} XP today</small></div><span class="pill fire ${liveStreak() ? "" : "off"}">${I.flame}<b>${liveStreak()}</b></span></div>
+    <section class="card votd"><div class="votd-h"><span class="eyebrow">Verse of the day</span>
     <button class="iconbtn heart ${isSaved(v) ? "on" : ""}" data-save="${esc(v)}" aria-label="${isSaved(v) ? "Remove from saved" : "Save verse"}">${isSaved(v) ? I.heart : I.heartO}</button></div>
-    <blockquote>${esc(passageText(v))}</blockquote><span class="ref">${esc(v)}</span>
-    <div class="goal"><span>${xpToday() >= S.goal ? "Daily goal met" : "Daily goal"}</span><span class="goalbar"><i style="width:${g * 100}%"></i></span><span>${xpToday()}/${S.goal} XP</span></div></section>`;
+    <blockquote>${esc(passageText(v))}</blockquote><span class="ref">${esc(v)}</span></section>`;
   let gi = 0;
   sec.units.forEach((u, ui) => {
     const nodes = NODES[sec.id].map((n, i) => ({ ...n, i })).filter((n) => n.ui === ui);
-    h += `<section class="unit" id="unit-${ui}"><div class="banner"><span class="eyebrow">Unit ${ui + 1}</span><h2>${esc(u.t)}</h2><p>${esc(u.d)}</p></div><div class="path">`;
+    const ln = nodes.filter((n) => n.kind === "lesson"), ld = ln.filter((n) => isDone(n.id)).length;
+    h += `<section class="unit" id="unit-${ui}"><div class="window">${unitWindow(GLASS[sec.color], sec.id + ui, ld / ln.length)}<span class="count">${ld}/${ln.length}</span>
+      <div class="cap"><span class="eyebrow">Unit ${ui + 1}</span><h2>${esc(u.t)}</h2><p>${esc(u.d)}</p></div></div><div class="path">`;
     nodes.forEach((n, k) => {
       const done = isDone(n.id), open = nodeOpen(sec.id, n.i), isCur = n.i === cur;
-      const label = n.kind === "review" ? `Unit ${ui + 1} review` : LESSON[n.id].l.t;
-      const icon = done ? (n.kind === "review" ? I.trophy : I.check) : !open ? (n.kind === "review" ? I.trophy : I.lock) : n.kind === "review" ? I.trophy : I.star;
+      const label = n.kind === "review" ? "Unit review" : LESSON[n.id].l.t;
+      const state = done ? "done" : open ? "current" : "locked";
+      const icon = n.kind === "review" ? D(I.trophy) : done ? D(I.check) : open ? D(I.star) : D(I.lock);
       h += `<div class="nodewrap ${isCur ? "cur" : ""}" style="transform:translateX(${offs[(k + gi) % offs.length]}px)">${isCur ? `<span class="bubble">${cur === 0 ? "Start" : "Next"}</span>` : ""}
-        <button class="node ${done ? "done" : open ? "" : "locked"} ${isCur ? "current" : ""} ${n.kind === "review" ? "review" : ""}" data-node="${n.i}" aria-label="${esc(label)}${done ? ", complete" : open ? "" : ", locked"}">${icon}</button></div>`;
+        <button class="node ${done ? "done" : open ? "current" : "locked"}" data-node="${n.i}" aria-label="${esc(label)}${done ? ", complete" : open ? "" : ", locked"}">${medallion(GLASS[sec.color], state, icon, n.i * 7 + 3)}</button><span class="lbl">${esc(label)}</span></div>`;
     });
     gi += nodes.length;
     h += `</div></section>`;
   });
   view().innerHTML = `<div class="wrap">${h}</div>`;
   $("#secbtn").onclick = openSections;
-  if (cur >= 0 && !renderLearn.scrolled) { renderLearn.scrolled = true; const el = $(`[data-node="${cur}"]`); if (el && el.getBoundingClientRect().bottom > innerHeight - 110) setTimeout(() => el.scrollIntoView({ block: "center" }), 30); }
 }
 function openSections() {
-  sheet(`<h3>Choose a section</h3><p>Each section is its own path. Your progress is kept in all of them.</p><div class="seclist">${SECTIONS.map((s) => {
+  sheet(`<h3>Choose a window</h3><p>Each section is its own path. Your light stays in all of them.</p><div class="seclist">${SECTIONS.map((s) => {
     const [d, n] = secProgress(s.id);
-    return `<button class="secrow" data-c="${s.color}" data-sec="${s.id}" aria-current="${s.id === S.section}"><span class="sw">${SEC_ICON[s.id]}</span><b>${esc(s.name)}</b><small>${esc(s.desc)}</small><span class="bar"><i style="width:${(d / n) * 100}%"></i></span></button>`;
-  }).join("")}</div>`, (el) => el.querySelectorAll("[data-sec]").forEach((b) => (b.onclick = () => { S.section = b.dataset.sec; save(); closeSheet(); renderLearn.scrolled = false; renderLearn(); window.scrollTo(0, 0); })));
+    return `<button class="secrow" data-c="${s.color}" data-sec="${s.id}" aria-current="${s.id === S.section}">${roseFor(s)}<b>${esc(s.name)}</b><small>${esc(s.desc)}</small><span class="pct">${Math.round((d / n) * 100)}%</span></button>`;
+  }).join("")}</div>`, (el) => el.querySelectorAll("[data-sec]").forEach((b) => (b.onclick = () => { S.section = b.dataset.sec; save(); closeSheet(); renderLearn(); window.scrollTo(0, 0); })));
 }
 function openNode(i) {
   const sec = SEC[S.section], n = NODES[sec.id][i], open = nodeOpen(sec.id, i), done = isDone(n.id);
   const u = sec.units[n.ui];
+  const icon = n.kind === "review" ? D(I.trophy) : done ? D(I.check) : open ? D(I.star) : D(I.lock);
+  const m = medallion(GLASS[sec.color], done ? "done" : open ? "current" : "locked", icon, i * 7 + 3);
   if (n.kind === "review") {
-    sheet(`<span class="eyebrow">Unit ${n.ui + 1} · ${esc(u.t)}</span><h3>Unit review</h3><p>${open ? "Practice every verse from this unit. Earn a trophy." : "Finish every lesson in this unit to unlock the review."}</p>
-      ${open ? `<button class="btn wide" id="go">${done ? "Review again +5 XP" : "Start review +15 XP"}</button>` : ""}`, (el) => { const g = el.querySelector("#go"); if (g) g.onclick = () => { closeSheet(); startReview(sec, n.ui); }; }, sec.color);
+    sheet(`<div class="medal-row">${m}<div><span class="eyebrow">Unit ${n.ui + 1} · ${esc(u.t)}</span><h3>Unit review</h3></div></div><p>${open ? "Every verse from this unit, mixed together. Finish it to seal the unit's window." : "Finish every lesson in this unit to unlock the review."}</p>
+      ${open ? `<button class="btn wide" id="go">${done ? "Review again · +5 XP" : "Start review · +15 XP"}</button>` : ""}`, (el) => { const g = el.querySelector("#go"); if (g) g.onclick = () => { closeSheet(); startReview(sec, n.ui); }; }, sec.color);
     return;
   }
   const L = LESSON[n.id], count = u.lessons.length;
-  sheet(`<span class="eyebrow">Unit ${n.ui + 1} · Lesson ${n.li + 1} of ${count}</span><h3>${esc(L.l.t)}</h3><p>${open ? esc(L.l.v.join(" · ")) : "Finish the lesson before this one to unlock it."}</p>
-    ${open ? `<button class="btn wide" id="go">${done ? "Practice again +5 XP" : "Start +10 XP"}</button>` : ""}`, (el) => { const g = el.querySelector("#go"); if (g) g.onclick = () => { closeSheet(); startLesson(n.id); }; }, sec.color);
+  sheet(`<div class="medal-row">${m}<div><span class="eyebrow">Unit ${n.ui + 1} · Lesson ${n.li + 1} of ${count}</span><h3>${esc(L.l.t)}</h3></div></div><p>${open ? esc(L.l.v.join("  ·  ")) : "Finish the lesson before this one to unlock it."}</p>
+    ${open ? `<button class="btn wide" id="go">${done ? "Practice again · +5 XP" : "Start lesson · +10 XP"}</button>` : ""}`, (el) => { const g = el.querySelector("#go"); if (g) g.onclick = () => { closeSheet(); startLesson(n.id); }; }, sec.color);
 }
 
 /* Bible reader */
@@ -238,7 +262,7 @@ async function renderBible(scrollTo) {
   try { book = await loadBook(b); } catch { $("#chap").innerHTML = `<div class="empty"><h3>Couldn't open this chapter</h3><p>Check your connection and try again. Chapters you've opened before work offline.</p><button class="btn" id="retry">Try again</button></div>`; $("#retry").onclick = () => renderBible(); return; }
   if (TAB !== "bible" || S.reader.b !== b || S.reader.c !== c) return;
   const vs = book.chapters[c - 1], saved = savedVersesIn(b, c);
-  $("#chap").innerHTML = `<div class="chapter">${vs.map((t, i) => `<span class="v ${saved.has(i + 1) ? "saved" : ""} ${SEL.has(i + 1) ? "sel" : ""}" id="v-${i + 1}" data-v="${i + 1}" tabindex="0" role="button" aria-pressed="${SEL.has(i + 1)}"><sup>${i + 1}</sup>${esc(t)}</span> `).join("")}</div>
+  $("#chap").innerHTML = `<div class="chapter ${c === 1 ? "first" : ""}">${vs.map((t, i) => `<span class="v ${saved.has(i + 1) ? "saved" : ""} ${SEL.has(i + 1) ? "sel" : ""}" id="v-${i + 1}" data-v="${i + 1}" tabindex="0" role="button" aria-pressed="${SEL.has(i + 1)}"><sup>${i + 1}</sup>${esc(t)}</span> `).join("")}</div>
     <div class="chnav"><button class="btn ghost small" id="prevc" ${b === 0 && c === 1 ? "disabled" : ""}>${I.arrowL}Previous</button><button class="btn ghost small" id="nextc" ${b === 65 && c === BOOKS[65].ch ? "disabled" : ""}>Next${I.arrowR}</button></div>`;
   $$(".chapter .v").forEach((el) => { const tog = () => { const n = +el.dataset.v; SEL.has(n) ? SEL.delete(n) : SEL.add(n); el.classList.toggle("sel"); el.setAttribute("aria-pressed", SEL.has(n)); selBar(); }; el.onclick = tog; el.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); tog(); } }; });
   $("#prevc").onclick = () => goChapter(-1); $("#nextc").onclick = () => goChapter(1);
@@ -288,12 +312,12 @@ function renderSaved() {
   const list = q ? all.filter(([r, s]) => (r + " " + s.t + " " + (s.note || "")).toLowerCase().includes(q)) : all;
   let h = topBar(`<span class="title-bar">Saved</span>`);
   if (!all.length) {
-    h += `<div class="empty"><span class="big">${I.heart}</span><h3>Keep the verses that speak to you</h3><p>Tap the heart on any verse in a lesson, or select verses while reading the Bible. They'll live here so you can come back, add notes, and memorize them.</p><button class="btn" id="toBible">Open the Bible</button></div>`;
+    h += `<div class="empty">${medallion("#FF5C7A", "current", D(I.heart), 11).replace("<svg", "<svg class=\"big\"")}<h3>Keep the verses that speak to you</h3><p>Tap the heart on any verse in a lesson, or select verses while reading the Bible. They'll live here so you can come back, add notes, and memorize them.</p><button class="btn" id="toBible">Open the Bible</button></div>`;
   } else {
     h += `<h1 class="page-h">My verses</h1><p class="page-sub">${all.length} saved${all.length > 1 ? " · practice them to memorize" : ""}</p>
       <button class="btn wide" id="practice">${I.bulb}Practice saved verses</button>
       <div style="margin-top:14px"><input class="search" id="sq" type="search" placeholder="Search your verses and notes" value="${esc(savedQ)}" aria-label="Search saved verses"></div>
-      <div class="savedlist">${list.map(([ref, s]) => `<article class="scard" data-ref="${esc(ref)}">
+      <div class="savedlist">${list.map(([ref, s]) => `<article class="scard card" data-ref="${esc(ref)}">
         <div class="row"><button class="ref" data-open="${esc(ref)}">${esc(ref)}</button><span class="when">${new Date(s.at).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}</span></div>
         <blockquote>${esc(s.t)}</blockquote>
         <textarea class="note" data-note="${esc(ref)}" rows="1" placeholder="Why does this verse matter to you?" aria-label="Note for ${esc(ref)}">${esc(s.note || "")}</textarea>
@@ -314,22 +338,25 @@ function renderSaved() {
 function renderMe() {
   setColor((SEC[S.section] || SECTIONS[0]).color);
   const lessons = Object.keys(S.done).filter((k) => !k.startsWith("R:")).length;
+  const total = Object.keys(LESSON).length;
   const days = Array.from({ length: 7 }, (_, i) => { const d = new Date(); d.setDate(d.getDate() - (6 - i)); return localDay(d); });
   const max = Math.max(S.goal, ...days.map((d) => S.days[d] || 0));
   let h = topBar(`<span class="title-bar">Profile</span>`);
-  h += `<div class="stats" style="margin-top:16px">
-    <div class="stat" style="color:#E8790F">${I.flame}<div><b style="color:var(--ink)">${liveStreak()}</b><small>Day streak</small></div></div>
-    <div class="stat" style="color:var(--gold-d)">${I.xp}<div><b style="color:var(--ink)">${S.xp}</b><small>Total XP</small></div></div>
-    <div class="stat" style="color:var(--c)">${I.check}<div><b style="color:var(--ink)">${lessons}</b><small>Lessons done</small></div></div>
-    <div class="stat" style="color:#E5484D">${I.heart}<div><b style="color:var(--ink)">${Object.keys(S.saved).length}</b><small>Verses saved</small></div></div></div>
-  <section class="block"><h3>This week</h3><div class="week" role="img" aria-label="XP earned each of the last 7 days">${days.map((d) => { const x = S.days[d] || 0; return `<div class="col ${x ? "" : "zero"}"><em>${x || ""}</em><i style="height:${Math.max(4, (x / max) * 100)}px"></i><small>${new Date(d + "T12:00").toLocaleDateString(undefined, { weekday: "narrow" })}</small></div>`; }).join("")}</div>
-    <p class="page-sub" style="margin-top:8px">Best streak: ${Math.max(S.best, liveStreak())} day${Math.max(S.best, liveStreak()) === 1 ? "" : "s"}</p></section>
-  <section class="block"><h3>Daily goal</h3><div class="segs">${[[10, "Casual"], [20, "Regular"], [30, "Serious"], [50, "Intense"]].map(([n, l]) => `<button data-goal="${n}" aria-pressed="${S.goal === n}">${l} · ${n} XP</button>`).join("")}</div></section>
-  <section class="block"><h3>Sections</h3>${SECTIONS.map((s) => { const [d, n] = secProgress(s.id); return `<div class="prow" data-c="${s.color}"><i class="sw"></i><b>${esc(s.name)}</b><span>${d}/${n}</span><span class="bar"><i style="width:${(d / n) * 100}%"></i></span></div>`; }).join("")}</section>
+  h += `<h1 class="page-h">Your cathedral</h1><p class="page-sub">${lessons} of ${total} panes lit across five windows</p>
+  <div class="nave">${SECTIONS.map((s) => { const [d, n] = secProgress(s.id); return `<button data-go="${s.id}" data-c="${s.color}">${roseFor(s)}<span class="pct">${Math.round((d / n) * 100)}%</span>${esc(s.name.replace("The ", ""))}</button>`; }).join("")}</div>
+  <div class="stats">
+    <div class="stat card" style="color:#FF9A3D">${I.flame}<div><b style="color:var(--ink)">${liveStreak()}</b><small>Day streak</small></div></div>
+    <div class="stat card" style="color:var(--gilt)">${I.xp}<div><b style="color:var(--ink)">${S.xp}</b><small>Total XP</small></div></div>
+    <div class="stat card" style="color:var(--c)">${I.check}<div><b style="color:var(--ink)">${lessons}</b><small>Lessons done</small></div></div>
+    <div class="stat card" style="color:#FF5C7A">${I.heart}<div><b style="color:var(--ink)">${Object.keys(S.saved).length}</b><small>Verses saved</small></div></div></div>
+  <section class="block"><h3>This week</h3><div class="card week" role="img" aria-label="XP earned each of the last 7 days">${days.map((d) => { const x = S.days[d] || 0; return `<div class="col ${x ? "" : "zero"} ${d === today() ? "today" : ""}"><em>${x || ""}</em><i style="height:${Math.max(4, (x / max) * 86)}px"></i><small>${new Date(d + "T12:00").toLocaleDateString(undefined, { weekday: "narrow" })}</small></div>`; }).join("")}</div>
+    <p class="page-sub" style="margin-top:10px">Best streak: ${Math.max(S.best, liveStreak())} day${Math.max(S.best, liveStreak()) === 1 ? "" : "s"}</p></section>
+  <section class="block"><h3>Daily goal</h3><div class="segs">${[[10, "Casual"], [20, "Regular"], [30, "Serious"], [50, "Intense"]].map(([n, l]) => `<button data-goal="${n}" aria-pressed="${S.goal === n}">${l} · ${n}</button>`).join("")}</div></section>
   <section class="block"><h3>Sound effects</h3><div class="segs"><button data-sound="1" aria-pressed="${S.sound}">On</button><button data-sound="0" aria-pressed="${!S.sound}">Off</button></div></section>
   <button class="linkbtn" id="reset">Reset all progress</button>
   <p class="fine">Scripture quotations are from the Berean Standard Bible (BSB), which is in the public domain. Your progress and saved verses are stored on this device.</p>`;
   view().innerHTML = `<div class="wrap">${h}</div>`;
+  $$("[data-go]").forEach((b) => (b.onclick = () => { S.section = b.dataset.go; save(); tab("learn"); }));
   $$("[data-goal]").forEach((b) => (b.onclick = () => { S.goal = +b.dataset.goal; save(); renderMe(); }));
   $$("[data-sound]").forEach((b) => (b.onclick = () => { S.sound = b.dataset.sound === "1"; save(); renderMe(); if (S.sound) beep(true); }));
   let armed = false;
@@ -390,9 +417,9 @@ function lessonSteps(L, sec) {
 let P = null;
 function openPlayer(meta, steps) {
   steps.forEach((x, i) => (x.uid = i));
-  P = { meta, steps, pos: 0, sel: null, checked: false, graded: 0, firstRight: 0, retried: new Set(), built: [] };
+  P = { meta, steps, pos: 0, sel: null, checked: false, graded: 0, firstRight: 0, retried: new Set(), built: [], combo: 0 };
   const el = document.createElement("div"); el.className = "player"; el.id = "player"; el.dataset.c = meta.color;
-  el.innerHTML = `<div class="p-top"><button class="iconbtn" id="pquit" aria-label="Quit">${I.x}</button><div class="prog" role="progressbar" aria-label="Lesson progress"><i id="pbar" style="width:0"></i></div></div>
+  el.innerHTML = `<div class="p-top"><button class="iconbtn" id="pquit" aria-label="Quit">${I.x}</button><div class="panes" id="panes" role="progressbar" aria-label="Lesson progress"></div><span class="combo" id="combo"></span></div>
     <div class="p-body" id="pbody"><div class="p-inner" id="pin"></div></div>
     <div class="p-foot" id="pfoot"><div class="p-inner"><div class="fb" id="fb" hidden></div><button class="btn wide go" id="pgo">Continue</button></div></div>`;
   document.body.append(el); document.body.style.overflow = "hidden"; $(".selbar")?.remove();
@@ -417,13 +444,19 @@ const verseHTML = (ref, blankIdx) => {
 function saveBtn(ref) { const on = isSaved(ref); return `<button class="savebtn ${on ? "on" : ""}" data-psave="${esc(ref)}" aria-pressed="${on}">${on ? I.heart : I.heartO}${on ? "Saved" : "Save"}</button>`; }
 function wireSave(root) { root.querySelectorAll("[data-psave]").forEach((b) => (b.onclick = () => { const on = toggleSave(b.dataset.psave); b.classList.toggle("on", on); b.setAttribute("aria-pressed", on); b.innerHTML = (on ? I.heart : I.heartO) + (on ? "Saved" : "Save"); })); }
 
+function drawPanes(done) {
+  const n = P.steps.length, k = done ? n : P.pos;
+  $("#panes").innerHTML = Array.from({ length: n }, (_, i) => `<i class="${i < k ? "on" : ""}"></i>`).join("");
+  $("#panes").setAttribute("aria-valuenow", Math.round((k / n) * 100));
+  $("#combo").innerHTML = P.combo >= 3 ? `${I.flame}${P.combo}` : "";
+}
 function draw() {
   const st = P.steps[P.pos], pin = $("#pin"), go = $("#pgo"), foot = $("#pfoot");
   foot.className = "p-foot"; $("#fb").hidden = true; P.sel = null; P.checked = false; P.built = [];
-  $("#pbar").style.width = (P.pos / P.steps.length) * 100 + "%";
-  const label = (icon, t) => `<div class="kind">${icon}${t}</div>`;
+  drawPanes();
+  const label = (icon, t) => `<div class="kind">${t}</div>`;
   if (st.type === "teach") {
-    pin.innerHTML = `${label(SEC_ICON[P.meta.sec] || I.book, P.meta.kicker)}<h1 class="q">${esc(st.title)}</h1><div class="teach">${st.paras.map((p) => `<p>${esc(p)}</p>`).join("")}</div>`;
+    pin.innerHTML = `<div class="teach">${label("", P.meta.kicker)}<h1>${esc(st.title)}</h1>${st.paras.map((p) => `<p>${esc(p)}</p>`).join("")}</div>`;
     go.disabled = false; go.textContent = "Continue"; go.onclick = next;
   } else if (st.type === "read") {
     pin.innerHTML = `${label(I.book, st.retry ? "Read it again" : "New verse")}<div class="vcard" style="margin-top:14px"><p class="verse">${verseHTML(st.ref)}</p><div class="vfoot"><span class="ref">${esc(st.ref)}</span>${saveBtn(st.ref)}</div></div>`;
@@ -466,9 +499,11 @@ function check() {
   if (st.type === "build") { ok = P.built.map((k) => st.bank[k]).join(" ") === st.chunk.join(" "); right = st.chunk.join(" "); $$("#bank .chip").forEach((b) => (b.disabled = true)); }
   else { ok = P.sel === st.ans; right = st.options[st.ans]; $$("#pin .opt").forEach((b, j) => { b.disabled = true; if (j === st.ans) b.classList.add("right"); else if (j === P.sel) b.classList.add("wrong"); }); if (st.type === "blank") $("#blank").textContent = right; }
   if (!st.retry) { P.graded++; if (ok) P.firstRight++; }
+  P.combo = ok ? P.combo + 1 : 0; $("#combo").innerHTML = P.combo >= 3 ? `${I.flame}${P.combo}` : "";
+  try { navigator.vibrate && navigator.vibrate(ok ? 12 : [30, 40, 30]); } catch {}
   if (!ok && !P.retried.has(st.uid)) { P.retried.add(st.uid); P.steps.push({ ...st, retry: true, ...(st.type === "build" ? { bank: shuffle(st.bank) } : st.options ? reshuffle(st) : {}) }); }
   beep(ok);
-  const praise = ["Excellent!", "Nice job!", "Correct!", "Well done!", "Amen!", "Great!"][rand(6)];
+  const praise = P.combo >= 3 ? `${P.combo} in a row!` : ["Excellent!", "Nice job!", "Correct!", "Well done!", "Amen!", "Great!"][rand(6)];
   $("#pfoot").className = "p-foot " + (ok ? "good" : "bad");
   const fb = $("#fb"); fb.hidden = false;
   fb.innerHTML = `<span class="badge">${ok ? I.check : I.x}</span><div><strong>${ok ? praise : "Correct answer:"}</strong>${ok ? (st.ref && st.type !== "where" ? `<span>${esc(st.ref)}</span>` : "") : `<span>${esc(right)}</span>`}</div>`;
@@ -489,16 +524,40 @@ function finish() {
   save(); P.finished = true;
   const acc = P.graded ? Math.round((P.firstRight / P.graded) * 100) : 100;
   const goalHit = before < S.goal && S.days[t] >= S.goal;
-  $("#pbar").style.width = "100%";
-  $("#pin").innerHTML = `<div class="done-screen"><div class="medal">${m.kind === "review" ? I.trophy : I.star}</div>
-    <h2>${m.kind === "review" ? "Unit complete!" : m.kind === "practice" ? "Practice complete!" : "Lesson complete!"}</h2>
-    <p class="page-sub" style="margin:0">${goalHit ? "You hit your daily goal. Keep showing up." : perfect ? "Perfect, no mistakes." : "Every verse you learn stays with you."}</p>
-    <div class="tiles"><div class="tile" style="--tc:var(--gold-d)"><small>XP</small><b>+${gain}</b></div><div class="tile" style="--tc:var(--good)"><small>Accuracy</small><b>${acc}%</b></div><div class="tile" style="--tc:#E8790F"><small>Streak</small><b>${S.streak}</b></div></div>
-    ${m.refs && m.refs.length ? `<div class="keep"><h4>Did a verse speak to you? Save it.</h4>${m.refs.map((r) => `<div class="krow"><div><p>${esc(passageText(r))}</p><span class="ref">${esc(r)}</span></div>${saveBtn(r)}</div>`).join("")}</div>` : ""}</div>`;
+  drawPanes(true);
+  if (m.kind === "lesson") { const L = LESSON[m.id]; S.lastLit = { sec: L.sec.id, key: `${L.ui}-${L.li}` }; save(); }
+  const icon = m.kind === "review" ? D(I.trophy) : m.kind === "practice" ? D(I.heart) : D(I.check);
+  const title = m.kind === "review" ? "Window sealed" : m.kind === "practice" ? "Well practiced" : "A pane is lit";
+  const line = goalHit ? "You hit your daily goal. Keep showing up." : perfect ? "Perfect. Not a single mistake." : "Every verse you learn stays with you.";
+  $("#pin").innerHTML = `<div class="done-screen"><div class="shine">${medallion(GLASS[m.color] || GLASS.gold, "done", icon, 5)}</div>
+    <h2>${title}</h2><p class="page-sub" style="margin:0">${line}</p>
+    <div class="tiles"><div class="tile"><small>XP</small><b style="color:var(--gilt)">+${gain}</b></div><div class="tile"><small>Accuracy</small><b style="color:var(--good)">${acc}%</b></div><div class="tile"><small>Streak</small><b style="color:#FF9A3D">${S.streak}</b></div></div>
+    ${m.refs && m.refs.length ? `<div class="keep"><h4>Did a verse speak to you? Keep it.</h4>${m.refs.map((r) => `<div class="krow"><div><p>${esc(passageText(r))}</p><span class="ref">${esc(r)}</span></div>${saveBtn(r)}</div>`).join("")}</div>` : ""}</div>`;
+  confetti(GLASS[m.color] || GLASS.gold);
+  beep(true); setTimeout(() => beep(true), 140);
   wireSave($("#pin"));
   $("#pfoot").className = "p-foot"; $("#fb").hidden = true;
   const go = $("#pgo"); go.disabled = false; go.textContent = "Continue"; go.onclick = () => { renderLearn.scrolled = false; closePlayer(); };
   $("#pbody").scrollTop = 0;
+}
+
+function confetti(hex) {
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const c = document.createElement("canvas"); c.id = "confetti"; document.body.append(c);
+  const dpr = devicePixelRatio || 1, W = (c.width = innerWidth * dpr), H = (c.height = innerHeight * dpr), x = c.getContext("2d");
+  const cols = [hex, "#E6C36A", "#FFFFFF", hex, "#F1EEE6"];
+  const ps = Array.from({ length: 90 }, () => ({ x: W / 2 + (Math.random() - 0.5) * W * 0.2, y: H * 0.32, vx: (Math.random() - 0.5) * 14 * dpr, vy: (-Math.random() * 14 - 6) * dpr, s: (4 + Math.random() * 6) * dpr, r: Math.random() * 6, vr: (Math.random() - 0.5) * 0.3, c: cols[rand(cols.length)], sides: 3 + rand(2) }));
+  let t = 0;
+  (function f() {
+    x.clearRect(0, 0, W, H); t++;
+    for (const p of ps) {
+      p.vy += 0.45 * dpr; p.x += p.vx; p.y += p.vy; p.vx *= 0.99; p.r += p.vr;
+      x.save(); x.translate(p.x, p.y); x.rotate(p.r); x.globalAlpha = Math.max(0, 1 - t / 110); x.fillStyle = p.c; x.beginPath();
+      for (let i = 0; i < p.sides; i++) { const a = (i / p.sides) * Math.PI * 2; x.lineTo(Math.cos(a) * p.s, Math.sin(a) * p.s); }
+      x.fill(); x.restore();
+    }
+    if (t < 110) requestAnimationFrame(f); else c.remove();
+  })();
 }
 
 function startLesson(id) {
@@ -540,7 +599,7 @@ document.addEventListener("keydown", (e) => {
   else if (e.key === "Enter" && !$("#pgo").disabled && !(document.activeElement && document.activeElement.closest(".opt,.chip,.savebtn"))) { e.preventDefault(); $("#pgo").click(); }
 });
 
-$(".tabs").innerHTML = [["learn", "Learn", I.learn], ["bible", "Bible", I.book], ["saved", "Saved", I.heart], ["me", "Profile", I.user]].map(([k, l, ic]) => `<button role="tab" data-tab="${k}" aria-selected="${k === TAB}">${ic}${l}</button>`).join("");
+$(".tabs").innerHTML = `<div class="bar">${[["learn", "Learn", I.learn], ["bible", "Bible", I.book], ["saved", "Saved", I.heart], ["me", "Profile", I.user]].map(([k, l, ic]) => `<button role="tab" data-tab="${k}" aria-selected="${k === TAB}">${ic}${l}</button>`).join("")}</div>`;
 $$(".tabs button").forEach((b) => (b.onclick = () => tab(b.dataset.tab)));
 render();
 

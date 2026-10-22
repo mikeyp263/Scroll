@@ -1,7 +1,7 @@
 # Section: The Journey (main path)
 # Lesson format: (title, "Ref; Ref", "teaching paragraph | paragraph", [(question, correct, wrong, wrong, wrong), ...])
 SECTION = dict(
-    id="journey", name="The Journey", color="green",
+    id="journey", name="The Journey", color="gold",
     desc="Start here. Meet Jesus, understand the gospel, and walk through God's whole story from Genesis to Revelation.",
     units=[
         ("Meet Jesus", "Who Jesus is, straight from the Gospel of John.", [

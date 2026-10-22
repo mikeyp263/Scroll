@@ -1,6 +1,6 @@
 # Section: Famous Stories
 SECTION = dict(
-    id="stories", name="Famous Stories", color="purple",
+    id="stories", name="Famous Stories", color="amethyst",
     desc="The stories everyone should know, from Noah's ark to Paul's shipwreck, and what each one shows us about God.",
     units=[
         ("In the Beginning", "The first stories of the Bible.", [

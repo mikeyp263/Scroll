@@ -1,6 +1,6 @@
 # Section: New Testament (Acts to Revelation)
 SECTION = dict(
-    id="nt", name="New Testament", color="blue",
+    id="nt", name="New Testament", color="sapphire",
     desc="Acts, the letters, and Revelation: how the early church lived, what the apostles taught, and how the story ends.",
     units=[
         ("Acts", "The Holy Spirit and the first church.", [

@@ -1,6 +1,6 @@
 # Section: The Gospels (life of Jesus in order)
 SECTION = dict(
-    id="gospels", name="The Gospels", color="red",
+    id="gospels", name="The Gospels", color="emerald",
     desc="Matthew, Mark, Luke, and John: the life, teaching, miracles, death, and resurrection of Jesus, in order.",
     units=[
         ("The Savior Is Born", "The birth and childhood of Jesus.", [

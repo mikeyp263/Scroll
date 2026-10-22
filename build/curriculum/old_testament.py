@@ -1,6 +1,6 @@
 # Section: Old Testament
 SECTION = dict(
-    id="ot", name="Old Testament", color="amber",
+    id="ot", name="Old Testament", color="ruby",
     desc="From Genesis to Malachi: the Law, Israel's history, the songs of worship, and the prophets who pointed to Christ.",
     units=[
         ("The Law", "Genesis to Deuteronomy, the five books of Moses.", [
