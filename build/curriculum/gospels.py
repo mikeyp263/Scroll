@@ -153,5 +153,23 @@ SECTION = dict(
              [("Where were the two disciples walking?", "Emmaus", "Bethlehem", "Damascus", "Jericho"),
               ("What did Jesus explain to them?", "What the Scriptures said about Himself", "How to fish", "Roman law", "Where to hide")]),
         ]),
+        ("After the Resurrection", "Jesus with His disciples before He ascended.", [
+            ("Peace Be With You", "John 20:19; John 20:21",
+             "On the evening of the resurrection, the disciples hid behind locked doors, afraid. | Jesus came and stood among them and said, \"Peace be with you.\" Then He sent them out: as the Father has sent Me, I am sending you.",
+             [("Why were the doors locked?", "The disciples were afraid", "It was the Sabbath", "Jesus told them to", "It was night")]
+             + [("What did Jesus say first when He appeared?", "Peace be with you", "Why did you run?", "Follow Me", "I told you so")]),
+            ("Breakfast on the Beach", "John 21:6; John 21:12",
+             "The disciples fished all night and caught nothing. A man on shore told them to cast the net on the right side. | The net filled with so many fish they couldn't haul it in, and they knew it was Jesus. He had breakfast waiting: \"Come, have breakfast.\"",
+             [("Which side of the boat did Jesus tell them to cast the net?", "The right side", "The left side", "Behind the boat", "Into deeper water"),
+              ("What did Jesus have ready on the shore?", "Breakfast", "A new boat", "A scroll", "A crowd")]),
+            ("All Authority", "Matthew 28:18",
+             "Before giving the Great Commission, Jesus told His followers why they could go with confidence. | All authority in heaven and on earth has been given to Me. The One sending us rules over everything.",
+             [("How much authority has been given to Jesus?", "All authority in heaven and on earth", "Authority over Israel", "Authority in heaven only", "Some authority")]
+             + [("What did Jesus give right after saying this?", "The Great Commission", "The Sermon on the Mount", "The Lord's Prayer", "The Beatitudes")]),
+            ("Carried Up to Heaven", "Luke 24:51",
+             "Forty days after His resurrection, Jesus led His disciples out near Bethany and lifted up His hands to bless them. | While He was blessing them, He left them and was carried up into heaven. He is now at the Father's right hand.",
+             [("What was Jesus doing as He was taken up?", "Blessing them", "Rebuking them", "Praying alone", "Teaching a parable"),
+              ("Where was Jesus taken?", "Up into heaven", "To Galilee", "To Rome", "Into the wilderness")]),
+        ]),
     ],
 )

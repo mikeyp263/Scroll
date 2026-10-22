@@ -1,5 +1,5 @@
 // Stained-glass drawing: medallions (lesson nodes), unit windows (banners), and rose windows (section progress).
-export const GLASS = { gold: "#E8B339", ruby: "#E2445A", sapphire: "#4A86F5", emerald: "#2DBA80", amethyst: "#A06AF2" };
+export const GLASS = { gold: "#E8B339", ruby: "#E2445A", sapphire: "#4A86F5", emerald: "#2DBA80", amethyst: "#A06AF2", aqua: "#2DB8C2" };
 const LEAD = "#07090E";
 
 function hexToHsl(hex) {

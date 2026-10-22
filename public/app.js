@@ -38,12 +38,15 @@ const I = {
   spark: '<svg viewBox="0 0 24 24"><path d="M12 1l2.4 7.6L22 11l-7.6 2.4L12 21l-2.4-7.6L2 11l7.6-2.4zM19 15l1 3 3 1-3 1-1 3-1-3-3-1 3-1z"/></svg>',
   arrowL: '<svg viewBox="0 0 24 24"><path d="M15.4 7.4 10.8 12l4.6 4.6L14 18l-6-6 6-6z"/></svg>',
   arrowR: '<svg viewBox="0 0 24 24"><path d="M8.6 16.6 13.2 12 8.6 7.4 10 6l6 6-6 6z"/></svg>',
+  sprout: '<svg viewBox="0 0 24 24"><path d="M11 22v-7.2C7.2 14.4 4 11.6 4 6.5V6h.5c3.3 0 5.8 1.4 7 3.6C12.6 6.3 15.4 4 19.5 4h.5v.5c0 5.4-3.3 8.6-7 9V22z"/></svg>',
+  down: '<svg viewBox="0 0 24 24"><path d="M11 4h2v12l5.5-5.5 1.4 1.4L12 19.8 4.1 11.9l1.4-1.4L11 16z"/></svg>',
   bulb: '<svg viewBox="0 0 24 24"><path d="M12 2a7 7 0 0 0-4 12.7V18h8v-3.3A7 7 0 0 0 12 2zM9 20h6v2H9z"/></svg>',
   q: '<svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm1 17h-2v-2h2zm2-7.7-.9.9c-.7.8-1.1 1.3-1.1 2.8h-2v-.5c0-1.1.4-2.1 1.2-2.8l1.2-1.3c.4-.4.6-.9.6-1.4a2 2 0 0 0-4 0H8a4 4 0 0 1 8 0c0 .9-.4 1.7-1 2.3z"/></svg>',
 };
-const SEC_ICON = { journey: I.compass, ot: I.tablets, nt: I.letter, gospels: I.cross, stories: I.spark };
+const SEC_ICON = { journey: I.compass, ot: I.tablets, nt: I.letter, gospels: I.cross, stories: I.spark, life: I.sprout };
 const D = (svg) => /\sd="([^"]+)"/.exec(svg)[1]; // raw path data for drawing inside glass
-const SEC_D = { journey: D(I.compass), ot: D(I.tablets), nt: D(I.letter), gospels: D(I.cross), stories: D(I.spark) };
+const SEC_D = Object.fromEntries(Object.entries(SEC_ICON).map(([k, v]) => [k, D(v)]));
+const SHORT = { journey: "Journey", ot: "Old Test.", nt: "New Test.", gospels: "Gospels", stories: "Stories", life: "Living" };
 const play = '<svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>';
 
 /* ---------- content indexes ---------- */
@@ -167,7 +170,7 @@ function render() {
   $$(".tabs button").forEach((b) => b.setAttribute("aria-selected", b.dataset.tab === TAB));
   ({ learn: renderLearn, bible: renderBible, saved: renderSaved, me: renderMe })[TAB]();
 }
-function tab(t) { TAB = t; closeSheet(); render(); window.scrollTo(0, 0); }
+function tab(t) { TAB = t; closeSheet(); window.onscroll = null; render(); window.scrollTo(0, 0); }
 
 /* Learn */
 function roseFor(sec, newest) {
@@ -179,6 +182,7 @@ function goalRing() {
   const g = Math.min(1, xpToday() / S.goal), C = 2 * Math.PI * 17;
   return `<svg class="ring" viewBox="0 0 42 42" aria-hidden="true"><circle cx="21" cy="21" r="17" fill="none" style="stroke:var(--raised)" stroke-width="5"/><circle cx="21" cy="21" r="17" fill="none" style="stroke:var(--gilt)" stroke-width="5" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${C * (1 - g)}" transform="rotate(-90 21 21)"/></svg>`;
 }
+let OPEN = {}; // which finished units are expanded, per section
 function renderLearn() {
   const sec = SEC[S.section] || SECTIONS[0]; setColor(sec.color);
   const v = VOTD_REFS[Math.floor(new Date(today()).getTime() / 864e5) % VOTD_REFS.length];
@@ -188,12 +192,14 @@ function renderLearn() {
   if (S.lastLit) { S.lastLit = null; save(); }
   const offs = [0, 54, 84, 54, 0, -54, -84, -54];
   const curNode = cur >= 0 ? NODES[sec.id][cur] : null;
-  const curTitle = curNode ? (curNode.kind === "review" ? `Unit ${curNode.ui + 1} review` : LESSON[curNode.id].l.t) : "Every pane is lit";
-  let h = topBar(`<button class="secbtn" id="secbtn" aria-label="Change section, current: ${esc(sec.name)}"><span class="gem">${gemFor(sec)}</span><span>${esc(sec.name)}</span>${I.chev}</button>`);
-  h += `<section class="hero">${roseFor(sec, newest)}
-    <h1>${esc(sec.name)}</h1><p class="sub">${dn} of ${tot} panes lit</p>
-    ${curNode ? `<button class="cta" data-node="${cur}"><div><small>${dn ? "Continue" : "Begin"} · Unit ${curNode.ui + 1}</small><b>${esc(curTitle)}</b></div><span class="go">${play}</span></button>` : `<p class="sub">You finished this section. Try another one.</p>`}</section>
-    <div class="card goal">${goalRing()}<div><b>${xpToday() >= S.goal ? "Daily goal complete" : "Daily goal"}</b><small>${xpToday()} of ${S.goal} XP today</small></div><span class="pill fire ${liveStreak() ? "" : "off"}">${I.flame}<b>${liveStreak()}</b></span></div>
+  const curTitle = curNode ? (curNode.kind === "review" ? `Unit ${curNode.ui + 1} review` : LESSON[curNode.id].l.t) : "";
+  const open = (OPEN[sec.id] = OPEN[sec.id] || {});
+  let h = topBar(`<span class="brand">Scroll</span>`);
+  h += `<nav class="strip" aria-label="Sections">${SECTIONS.map((s) => { const [d, n] = secProgress(s.id); return `<button class="schip" data-c="${s.color}" data-sec="${s.id}" aria-current="${s.id === sec.id}">${roseFor(s)}<span>${SHORT[s.id]}</span><small>${Math.round((d / n) * 100)}%</small></button>`; }).join("")}</nav>`;
+  h += `<section class="hero card"><div class="hero-row">${roseFor(sec, newest)}<div class="hero-info"><span class="eyebrow">${sec.units.length} units · ${tot} lessons</span><h1>${esc(sec.name)}</h1>
+      <span class="meter"><i style="width:${(dn / tot) * 100}%"></i></span><small>${dn} of ${tot} panes lit</small>
+      <div class="goalline">${goalRing()}<span>${xpToday() >= S.goal ? "Daily goal done" : `${xpToday()}/${S.goal} XP today`}</span></div></div></div>
+    ${curNode ? `<button class="cta" data-node="${cur}"><div><small>${dn ? "Continue" : "Begin"} · Unit ${curNode.ui + 1}</small><b>${esc(curTitle)}</b></div><span class="go">${play}</span></button>` : `<p class="sub done-note">You finished every lesson here. Pick another window above.</p>`}</section>
     <section class="card votd"><div class="votd-h"><span class="eyebrow">Verse of the day</span>
     <button class="iconbtn heart ${isSaved(v) ? "on" : ""}" data-save="${esc(v)}" aria-label="${isSaved(v) ? "Remove from saved" : "Save verse"}">${isSaved(v) ? I.heart : I.heartO}</button></div>
     <blockquote>${esc(passageText(v))}</blockquote><span class="ref">${esc(v)}</span></section>`;
@@ -201,21 +207,42 @@ function renderLearn() {
   sec.units.forEach((u, ui) => {
     const nodes = NODES[sec.id].map((n, i) => ({ ...n, i })).filter((n) => n.ui === ui);
     const ln = nodes.filter((n) => n.kind === "lesson"), ld = ln.filter((n) => isDone(n.id)).length;
-    h += `<section class="unit" id="unit-${ui}"><div class="window">${unitWindow(GLASS[sec.color], sec.id + ui, ld / ln.length)}<span class="count">${ld}/${ln.length}</span>
-      <div class="cap"><span class="eyebrow">Unit ${ui + 1}</span><h2>${esc(u.t)}</h2><p>${esc(u.d)}</p></div></div><div class="path">`;
-    nodes.forEach((n, k) => {
-      const done = isDone(n.id), open = nodeOpen(sec.id, n.i), isCur = n.i === cur;
-      const label = n.kind === "review" ? "Unit review" : LESSON[n.id].l.t;
-      const state = done ? "done" : open ? "current" : "locked";
-      const icon = n.kind === "review" ? D(I.trophy) : done ? D(I.check) : open ? D(I.star) : D(I.lock);
-      h += `<div class="nodewrap ${isCur ? "cur" : ""}" style="transform:translateX(${offs[(k + gi) % offs.length]}px)">${isCur ? `<span class="bubble">${cur === 0 ? "Start" : "Next"}</span>` : ""}
-        <button class="node ${done ? "done" : open ? "current" : "locked"}" data-node="${n.i}" aria-label="${esc(label)}${done ? ", complete" : open ? "" : ", locked"}">${medallion(GLASS[sec.color], state, icon, n.i * 7 + 3)}</button><span class="lbl">${esc(label)}</span></div>`;
-    });
+    const complete = nodes.every((n) => isDone(n.id));
+    const collapsed = complete && !open[ui];
+    h += `<section class="unit ${collapsed ? "collapsed" : ""}" id="unit-${ui}"><button class="window" data-unit="${ui}" aria-expanded="${!collapsed}" ${complete ? "" : "tabindex=\"-1\""}>${unitWindow(GLASS[sec.color], sec.id + ui, ld / ln.length)}<span class="count">${complete ? `${I.check} Complete` : `${ld}/${ln.length}`}</span>
+      <div class="cap"><span class="eyebrow">Unit ${ui + 1}</span><h2>${esc(u.t)}</h2><p>${collapsed ? "Tap to review these lessons" : esc(u.d)}</p></div></button>`;
+    if (!collapsed) {
+      h += `<div class="path">`;
+      nodes.forEach((n, k) => {
+        const done = isDone(n.id), avail = nodeOpen(sec.id, n.i), isCur = n.i === cur;
+        const label = n.kind === "review" ? "Unit review" : LESSON[n.id].l.t;
+        const state = done ? "done" : avail ? "current" : "locked";
+        const icon = n.kind === "review" ? D(I.trophy) : done ? D(I.check) : avail ? D(I.star) : D(I.lock);
+        h += `<div class="nodewrap ${isCur ? "cur" : ""}" style="transform:translateX(${offs[(k + gi) % offs.length]}px)">${isCur ? `<span class="bubble">${cur === 0 ? "Start" : "Next"}</span>` : ""}
+          <button class="node ${state}" data-node="${n.i}" aria-label="${esc(label)}${done ? ", complete" : avail ? "" : ", not started"}">${medallion(GLASS[sec.color], state, icon, n.i * 7 + 3)}</button><span class="lbl">${esc(label)}</span></div>`;
+      });
+      h += `</div>`;
+    }
     gi += nodes.length;
-    h += `</div></section>`;
+    h += `</section>`;
   });
-  view().innerHTML = `<div class="wrap">${h}</div>`;
-  $("#secbtn").onclick = openSections;
+  h += `<button class="jump" id="jump" hidden>${I.down}Continue</button>`;
+  view().innerHTML = `<div class="wrap fadein">${h}</div>`;
+  $$(".schip").forEach((b) => (b.onclick = () => { if (b.dataset.sec === S.section) return; S.section = b.dataset.sec; save(); renderLearn(); window.scrollTo(0, 0); }));
+  const curChip = $(".schip[aria-current=true]"); if (curChip) curChip.scrollIntoView({ inline: "center", block: "nearest" });
+  $$("[data-unit]").forEach((b) => (b.onclick = () => { const ui = +b.dataset.unit; const nodes = NODES[sec.id].filter((n) => n.ui === ui); if (!nodes.every((n) => isDone(n.id))) return; open[ui] = !open[ui]; renderLearn(); }));
+  watchJump(cur);
+}
+let jumpObs;
+function watchJump(cur) {
+  jumpObs && jumpObs.disconnect();
+  const target = $(`.nodewrap.cur .node`), jump = $("#jump");
+  if (!target || !jump || !("IntersectionObserver" in window)) return;
+  jumpObs = new IntersectionObserver(([e]) => { jump.hidden = e.isIntersecting || TAB !== "learn"; }, { rootMargin: "-80px 0px -110px 0px" });
+  jumpObs.observe(target);
+  jump.onclick = () => target.scrollIntoView({ behavior: "smooth", block: "center" });
+  const above = () => (jump.classList.toggle("up", target.getBoundingClientRect().top < 0));
+  above(); window.onscroll = () => { if (TAB === "learn") above(); };
 }
 function openSections() {
   sheet(`<h3>Choose a window</h3><p>Each section is its own path. Your light stays in all of them.</p><div class="seclist">${SECTIONS.map((s) => {
@@ -234,8 +261,10 @@ function openNode(i) {
     return;
   }
   const L = LESSON[n.id], count = u.lessons.length;
-  sheet(`<div class="medal-row">${m}<div><span class="eyebrow">Unit ${n.ui + 1} · Lesson ${n.li + 1} of ${count}</span><h3>${esc(L.l.t)}</h3></div></div><p>${open ? esc(L.l.v.join("  ·  ")) : "Finish the lesson before this one to unlock it."}</p>
-    ${open ? `<button class="btn wide" id="go">${done ? "Practice again · +5 XP" : "Start lesson · +10 XP"}</button>` : ""}`, (el) => { const g = el.querySelector("#go"); if (g) g.onclick = () => { closeSheet(); startLesson(n.id); }; }, sec.color);
+  sheet(`<div class="medal-row">${m}<div><span class="eyebrow">Unit ${n.ui + 1} · Lesson ${n.li + 1} of ${count}</span><h3>${esc(L.l.t)}</h3></div></div><p>${esc(L.l.v.join("  ·  "))}</p>
+    ${open ? `<button class="btn wide" id="go">${done ? "Practice again · +5 XP" : "Start lesson · +10 XP"}</button>`
+      : `<p class="skipnote">This lesson is further along the path. You can jump ahead any time.</p><button class="btn ghost wide" id="go">Skip ahead to this lesson</button>`}`,
+    (el) => { el.querySelector("#go").onclick = () => { closeSheet(); startLesson(n.id); }; }, sec.color);
 }
 
 /* Bible reader */
@@ -325,7 +354,7 @@ function renderSaved() {
         <div class="row"><span></span><span class="acts"><button class="iconbtn" data-copy="${esc(ref)}" aria-label="Copy ${esc(ref)}">${I.copy}</button><button class="iconbtn heart on" data-unsave="${esc(ref)}" aria-label="Remove ${esc(ref)}">${I.heart}</button></span></div></article>`).join("")}
       ${q && !list.length ? `<p class="page-sub">No saved verses match "${esc(savedQ)}".</p>` : ""}</div>`;
   }
-  view().innerHTML = `<div class="wrap">${h}</div>`;
+  view().innerHTML = `<div class="wrap fadein">${h}</div>`;
   $("#toBible")?.addEventListener("click", () => tab("bible"));
   $("#practice")?.addEventListener("click", startPractice);
   const sq = $("#sq"); if (sq) sq.oninput = () => { savedQ = sq.value; const p = sq.selectionStart; renderSaved(); const n = $("#sq"); n.focus(); n.setSelectionRange(p, p); };
@@ -343,8 +372,8 @@ function renderMe() {
   const days = Array.from({ length: 7 }, (_, i) => { const d = new Date(); d.setDate(d.getDate() - (6 - i)); return localDay(d); });
   const max = Math.max(S.goal, ...days.map((d) => S.days[d] || 0));
   let h = topBar(`<span class="title-bar">Profile</span>`);
-  h += `<h1 class="page-h">Your cathedral</h1><p class="page-sub">${lessons} of ${total} panes lit across five windows</p>
-  <div class="nave">${SECTIONS.map((s) => { const [d, n] = secProgress(s.id); return `<button data-go="${s.id}" data-c="${s.color}">${roseFor(s)}<span class="pct">${Math.round((d / n) * 100)}%</span>${esc(s.name.replace("The ", ""))}</button>`; }).join("")}</div>
+  h += `<h1 class="page-h">Your cathedral</h1><p class="page-sub">${lessons} of ${total} panes lit across ${SECTIONS.length} windows</p>
+  <div class="nave">${SECTIONS.map((s) => { const [d, n] = secProgress(s.id); return `<button data-go="${s.id}" data-c="${s.color}">${roseFor(s)}<span class="pct">${Math.round((d / n) * 100)}%</span>${esc(SHORT[s.id])}</button>`; }).join("")}</div>
   <div class="stats">
     <div class="stat card" style="color:#FF9A3D">${I.flame}<div><b style="color:var(--ink)">${liveStreak()}</b><small>Day streak</small></div></div>
     <div class="stat card" style="color:var(--gilt)">${I.xp}<div><b style="color:var(--ink)">${S.xp}</b><small>Total XP</small></div></div>
@@ -358,7 +387,7 @@ function renderMe() {
   <section class="block"><h3>Sound effects</h3><div class="segs"><button data-sound="1" aria-pressed="${S.sound}">On</button><button data-sound="0" aria-pressed="${!S.sound}">Off</button></div></section>
   <button class="linkbtn" id="reset">Reset all progress</button>
   <p class="fine">Scripture quotations are from the Berean Standard Bible (BSB), which is in the public domain. Your progress and saved verses are stored on this device.</p><p class="fine"><a href="privacy.html" style="color:var(--muted)">Privacy</a> · <a href="support.html" style="color:var(--muted)">Support</a></p>`;
-  view().innerHTML = `<div class="wrap">${h}</div>`;
+  view().innerHTML = `<div class="wrap fadein">${h}</div>`;
   $$("[data-go]").forEach((b) => (b.onclick = () => { S.section = b.dataset.go; save(); tab("learn"); }));
   $$("[data-goal]").forEach((b) => (b.onclick = () => { S.goal = +b.dataset.goal; save(); renderMe(); }));
   $$("[data-remind]").forEach((b) => (b.onclick = async () => { if (b.dataset.remind === "1") await enableReminders(S.remind.time); else { S.remind.on = false; save(); reschedule(); } renderMe(); }));
@@ -417,7 +446,8 @@ function lessonSteps(L, sec) {
   const refs = L.v, pool = sec.units.flatMap((u) => u.lessons.flatMap((x) => x.v));
   const s = [{ type: "teach", title: L.t, paras: L.teach }];
   for (const r of refs) s.push({ type: "read", ref: r });
-  const shortest = refs.slice().sort((a, b) => passageText(a).length - passageText(b).length)[0];
+  const wc = (r) => passageText(r).split(/\s+/).length;
+  const shortest = refs.filter((r) => wc(r) >= 5).sort((a, b) => passageText(a).length - passageText(b).length)[0] || refs.slice().sort((a, b) => wc(b) - wc(a))[0];
   const add = (x) => x && s.push(x);
   add(blankStep(refs[0]));
   if (L.q[0]) add(mcStep(L.q[0]));
@@ -457,6 +487,16 @@ const verseHTML = (ref, blankIdx) => {
   if (v && v.v.length > 1) return v.v.map(([n, t]) => `<sup>${n}</sup>${esc(t)}`).join(" ");
   return esc(passageText(ref));
 };
+const chapterOf = (ref) => ref.replace(/:\d+(-\d+)?$/, "");
+async function chapterSheet(ref) {
+  const p = parseRef(ref); if (!p) return;
+  sheet(`<span class="eyebrow">Berean Standard Bible</span><h3>${esc(chapterOf(ref))}</h3><div class="loading"><div class="spin"></div></div>`, null, P && P.meta.color);
+  let book; try { book = await loadBook(p.b); } catch { $("#scrim .loading").innerHTML = "<p>Couldn't load this chapter. Check your connection.</p>"; return; }
+  const vs = book.chapters[p.c - 1], box = $("#scrim .loading"); if (!box) return;
+  box.outerHTML = `<div class="chapter sheetch">${vs.map((t, i) => `<span class="v ${i + 1 >= p.v1 && i + 1 <= p.v2 ? "sel" : ""}" ${i + 1 === p.v1 ? 'id="chfocus"' : ""}><sup>${i + 1}</sup>${esc(t)}</span> `).join("")}</div><button class="btn wide" id="chdone" style="margin-top:18px">Back to lesson</button>`;
+  $("#chdone").onclick = closeSheet;
+  const f = $("#chfocus"); if (f) f.scrollIntoView({ block: "center" });
+}
 function saveBtn(ref) { const on = isSaved(ref); return `<button class="savebtn ${on ? "on" : ""}" data-psave="${esc(ref)}" aria-pressed="${on}">${on ? I.heart : I.heartO}${on ? "Saved" : "Save"}</button>`; }
 function wireSave(root) { root.querySelectorAll("[data-psave]").forEach((b) => (b.onclick = () => { const on = toggleSave(b.dataset.psave); b.classList.toggle("on", on); b.setAttribute("aria-pressed", on); b.innerHTML = (on ? I.heart : I.heartO) + (on ? "Saved" : "Save"); })); }
 
@@ -475,8 +515,9 @@ function draw() {
     pin.innerHTML = `<div class="teach">${label("", P.meta.kicker)}<h1>${esc(st.title)}</h1>${st.paras.map((p) => `<p>${esc(p)}</p>`).join("")}</div>`;
     go.disabled = false; go.textContent = "Continue"; go.onclick = next;
   } else if (st.type === "read") {
-    pin.innerHTML = `${label(I.book, st.retry ? "Read it again" : "New verse")}<div class="vcard" style="margin-top:14px"><p class="verse">${verseHTML(st.ref)}</p><div class="vfoot"><span class="ref">${esc(st.ref)}</span>${saveBtn(st.ref)}</div></div>`;
-    wireSave(pin); go.disabled = false; go.textContent = "Continue"; go.onclick = next;
+    pin.innerHTML = `${label(I.book, st.retry ? "Read it again" : "New verse")}<div class="vcard" style="margin-top:14px"><p class="verse">${verseHTML(st.ref)}</p><div class="vfoot"><span class="ref">${esc(st.ref)}</span>${saveBtn(st.ref)}</div></div>
+      <button class="readch" id="readch">${I.book}Read all of ${esc(chapterOf(st.ref))}</button>`;
+    wireSave(pin); $("#readch").onclick = () => chapterSheet(st.ref); go.disabled = false; go.textContent = "Continue"; go.onclick = next;
   } else if (st.type === "mc" || st.type === "blank" || st.type === "where") {
     let head;
     if (st.type === "mc") head = `${label(I.q, st.retry ? "Try again" : "Question")}<h1 class="q">${esc(st.q)}</h1>`;
@@ -584,7 +625,7 @@ function startLesson(id) {
 function startReview(sec, ui) {
   const u = sec.units[ui], refs = [...new Set(u.lessons.flatMap((l) => l.v))], pool = sec.units.flatMap((x) => x.lessons.flatMap((l) => l.v));
   let steps = refs.map((r, i) => (i % 2 ? whereStep(r, pool) : blankStep(r))).filter(Boolean);
-  steps.push(...pickN(refs, 2).map(buildStep));
+  steps.push(...pickN(refs.filter((r) => passageText(r).split(/\s+/).length >= 5), 2).map(buildStep));
   steps.push(...pickN(u.lessons.flatMap((l) => l.q), 3).map(mcStep));
   steps = shuffle(steps).slice(0, 12);
   openPlayer({ kind: "review", id: `R:${sec.id}-${ui}`, sec: sec.id, color: sec.color, xp: 15, refs: [], kicker: "Unit review" }, steps);
@@ -593,7 +634,7 @@ function startPractice() {
   const refs = pickN(Object.keys(S.saved), 6);
   let steps = [];
   for (const r of refs) { steps.push(blankStep(r)); }
-  steps.push(...pickN(refs, Math.min(3, refs.length)).map(buildStep));
+  steps.push(...pickN(refs.filter((r) => passageText(r).split(/\s+/).length >= 5), 3).map(buildStep));
   if (refs.length >= 2) steps.push(...pickN(refs, 2).map((r) => whereStep(r, [...ALL_REFS, ...Object.keys(S.saved)])));
   steps = shuffle(steps.filter(Boolean));
   if (!steps.length) { toast("Save a few more verses to practice"); return; }
@@ -648,3 +689,4 @@ if (NATIVE) {
 if ("serviceWorker" in navigator && location.protocol === "https:" && !/claude|anthropic/.test(location.hostname)) {
   window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
 }
+if (location.search.includes("selftest")) window.__t = { startLesson, startReview, SECTIONS, ids: Object.keys(LESSON) };

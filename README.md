@@ -4,12 +4,13 @@ Learn the Bible a few minutes a day, Duolingo-style. Every verse in the app is r
 
 ## What's inside
 
-- **Five learning paths**, each with units, lessons, and a trophy review at the end of every unit:
+- **Six learning paths**, each with units, lessons, and a trophy review at the end of every unit:
   - **The Journey** (start here): meet Jesus, understand the gospel, then walk through God's whole story from Genesis to Revelation
   - **Old Testament**: the Law, history, wisdom books, and the prophets
   - **New Testament**: Acts, the letters, and Revelation
   - **The Gospels**: the life of Jesus in order
-  - **Famous Stories**: Noah, David and Goliath, Daniel, Zacchaeus, and more
+  - **Famous Stories**: Noah, David and Goliath, Daniel, Zacchaeus, women of faith, and more
+  - **Living It Out**: what the Bible says about worry, prayer, forgiveness, identity, temptation, relationships, purpose, and hard times
 - **Lessons** mix short teaching, reading the verse, fill-in-the-blank, "where is this verse?", word ordering, and questions. Missed answers come back at the end.
 - **Saved verses**: tap the heart on any verse. Add a personal note, search, copy, and practice them to memorize.
 - **Bible reader**: the complete BSB, all 66 books. Tap verses to save or copy them.

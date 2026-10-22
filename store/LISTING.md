@@ -28,12 +28,13 @@ Scroll makes learning the Bible a daily habit you'll actually keep.
 
 Short, game-like lessons walk you through Scripture one step at a time. Every lesson you finish lights a pane of stained glass, and your rose window fills with light as you grow.
 
-FIVE PATHS THROUGH THE BIBLE
+SIX PATHS THROUGH THE BIBLE
 • The Journey: start here. Meet Jesus, understand the gospel, and walk through God's whole story from Genesis to Revelation.
 • Old Testament: the Law, Israel's history, the Psalms and Proverbs, and the prophets who pointed to Christ.
 • New Testament: Acts, the letters of Paul, Peter, James, and John, and Revelation.
 • The Gospels: the life of Jesus in order, from His birth to the empty tomb.
-• Famous Stories: Noah, David and Goliath, Daniel in the lions' den, Zacchaeus, and more.
+• Famous Stories: Noah, David and Goliath, Daniel in the lions' den, the women of faith, and more.
+• Living It Out: what God's Word says about worry, prayer, forgiveness, who you are, temptation, relationships, purpose, and hard days.
 
 REAL SCRIPTURE, WORD FOR WORD
 Every verse is the exact text of the Berean Standard Bible. Read it, fill in the missing word, put the phrase back in order, and find where it lives in the Bible. You'll remember it because you practiced it.
@@ -55,7 +56,7 @@ No account. No ads. No tracking. Just you and the Word.
 `bible,scripture,verse,christian,jesus,devotional,gospel,study,faith,quiz,memorize,daily,prayer,god`
 
 ## What's New (version 1.0)
-Welcome to Scroll. 167 lessons across five paths, the complete Bible, saved verses with notes, and daily reminders.
+Welcome to Scroll. 211 lessons across six paths, the complete Bible, saved verses with notes, and daily reminders.
 
 ## Review notes (for Apple's reviewer)
 No login is required. All content is bundled in the app and works offline. Daily reminders are local notifications the user opts into from the lesson-complete screen or Profile > Daily reminder. Scripture is the Berean Standard Bible, which is public domain.

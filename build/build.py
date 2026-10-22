@@ -10,7 +10,7 @@ import json, re, sys, os, importlib.util
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PUBLIC = os.path.join(ROOT, "public")
 CUR = os.path.join(ROOT, "build", "curriculum")
-ORDER = ["journey", "old_testament", "new_testament", "gospels", "stories"]
+ORDER = ["journey", "old_testament", "new_testament", "gospels", "stories", "living"]
 
 ROMAN = {"1": "I", "2": "II", "3": "III"}
 DISPLAY = {"Revelation of John": "Revelation", "Song of Solomon": "Song of Songs"}
